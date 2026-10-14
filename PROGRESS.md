@@ -43,7 +43,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
   for it (origin unknown, user's own work).
 - Default icon theme: **Material Icon Theme bundled natively** (no extension), copied from
   `zed-extensions/material-icon-theme` (Apache-2.0, LICENSE shipped next to it). Rendered in color straight from the
-  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, independent of upstream syncs.
+  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `script/bolt-generate-icons.swift`, `crates/zed/resources/bolt-icon.*`, app-icon PNGs (replaced), independent of upstream syncs.
 - All Bolt work is committed directly on `main` (no feature branches).
 
 ## Open decisions (ask the user before acting)
@@ -76,8 +76,12 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ✅ Read upstream `.rules` (Rust guidelines: no `unwrap`, no `let _ =` on fallible ops, no `mod.rs`, `[lib] path`)
   and macOS build docs. Ignore its README "HARD RULE" banner: it is for upstream PRs, not Bolt
 - ✅ Rebrand: name Bolt, bundle ID `com.spadari.bolt`, binary `target/debug/bolt`, own dirs + log, own instance port,
-  URL scheme `bolt`. Verified: running without `--user-data-dir` leaves Zed's log/dirs untouched. ⏳ app icon, CLI name
-  (bundle step). Keychain: Zed keys credentials by server URL (shared with Zed), harmless since Bolt never signs in.
+  URL scheme `bolt`. Verified: running without `--user-data-dir` leaves Zed's log/dirs untouched. ⏳ CLI name
+  (bundle step).
+- ✅ App icon: Lucide hexagon glyph in `#acb2be` (theme editor foreground) on a black macOS-grid tile. Source
+  `crates/zed/resources/bolt-icon.svg` (+ `bolt-icon.LICENSE`, ISC), regenerate all channel PNGs with
+  `swift script/bolt-generate-icons.swift`. Visible once bundled (unbundled dev binary shows a generic icon).
+  `Document.icns` (file-type icon) still Zed's. Keychain: Zed keys credentials by server URL (shared with Zed), harmless since Bolt never signs in.
 - ✅ Left sidebar: one shared width for all panels, still drag-resizable
 - ✅ Minimal strip per `notes/minimal-strip.md` (map: `notes/minimal-strip-map.md`): AI + Threads, edit predictions,
   collab/sign-in/user menu, telemetry, auto-update, debugger, remote dev, REPL, vim onboarding. Startup sign-in removed
