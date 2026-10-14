@@ -1076,6 +1076,8 @@
   "git_panel": {
     // Whether to show the git panel button in the status bar.
     "button": true,
+    // BOLT: use Bolt's VS Code-style git panel; `false` shows Zed's git panel instead.
+    "bolt_panel": true,
     // Where to dock the git panel. Can be 'left' or 'right'.
     // BOLT: left sidebar.
     "dock": "left",

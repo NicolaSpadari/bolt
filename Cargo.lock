@@ -2356,6 +2356,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "bolt_scm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "askpass",
+ "editor",
+ "file_icons",
+ "git",
+ "git_ui",
+ "git_ui_core",
+ "gpui",
+ "menu",
+ "multi_buffer",
+ "picker",
+ "project",
+ "settings",
+ "theme",
+ "ui",
+ "util",
+ "workspace",
+ "zed_actions",
+]
+
+[[package]]
 name = "bolt_search_panel"
 version = "0.1.0"
 dependencies = [
@@ -22818,6 +22842,7 @@ dependencies = [
  "audio",
  "auto_update",
  "auto_update_ui",
+ "bolt_scm",
  "bolt_search_panel",
  "breadcrumbs",
  "call",

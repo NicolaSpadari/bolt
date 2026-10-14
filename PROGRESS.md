@@ -43,7 +43,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
   for it (origin unknown, user's own work).
 - Default icon theme: **Material Icon Theme bundled natively** (no extension), copied from
   `zed-extensions/material-icon-theme` (Apache-2.0, LICENSE shipped next to it). Rendered in color straight from the
-  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `script/bolt-update-file-nesting`, `crates/project_panel/src/bolt_nesting*` (code, antfu block verbatim `.jsonc`, MIT LICENSE), `script/bolt-generate-icons.swift`, `crates/zed/resources/bolt-icon.*`, app-icon PNGs (replaced), independent of upstream syncs.
+  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `crates/bolt_scm/`, `assets/icons/bolt/git_merge.svg` (Lucide, ISC), `script/bolt-update-file-nesting`, `crates/project_panel/src/bolt_nesting*` (code, antfu block verbatim `.jsonc`, MIT LICENSE), `script/bolt-generate-icons.swift`, `crates/zed/resources/bolt-icon.*`, app-icon PNGs (replaced), independent of upstream syncs.
 - All Bolt work is committed directly on `main` (no feature branches).
 
 ## Open decisions (ask the user before acting)
@@ -97,21 +97,22 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ⏳ `script/bolt-sync` (merge on `sync/<tag>` branch, rollback tag, touch-point check, build/clippy/test) tried once
 
 ### P1 — Source Control panel (VS Code parity)
-Full checklist: `notes/vscode-scm-parity.md`. Summary:
-- ⏳ Gap analysis: Zed `git_ui` panel vs. VS Code SCM (fill the "Zed today" column of the parity file)
-- ⏳ Panel skeleton (`bolt_scm`) replacing Zed's git panel in the dock, activity icon + change-count badge,
-  `ctrl-shift-g`
-- ⏳ Commit input box (multi-line, placeholder with branch, `cmd-enter`, validation, message history)
-- ⏳ Commit button + dropdown (Commit / Amend / Commit & Push / Commit & Sync) + Sync/Publish action button
-- ⏳ Resource groups: Merge Changes, Staged Changes, Changes, Untracked (setting) with counts
-- ⏳ Rows: icon, name, dimmed path, colored status letter, hover inline actions (open / discard / stage / unstage)
-- ⏳ Group inline actions (Stage All / Unstage All / Discard All), multi-select + bulk actions
-- ⏳ List ↔ tree view toggle, sort by name / path / status
-- ⏳ Click → diff view; context menus (open changes, open file, open HEAD, add to .gitignore, reveal, copy path…)
-- ⏳ "…" menu: pull / push / fetch / sync, branch, remote, stash, tags, worktrees, show git output
-- ⏳ Multiple repositories section
-- ⏳ Merge conflict flow (Merge Changes group, mark resolved)
-- ⛔ Commit graph (use Zed's)
+Full checklist: `notes/vscode-scm-parity.md`. Architecture: new crate `bolt_scm` (own UI, repository API for
+stage/unstage/discard/commit); Zed's `GitPanel` stays loaded without a dock button because Zed's workspace git actions
+(push/pull/fetch/stash/uncommit/…) are routed through it — `bolt_scm` dispatches them. Shared commit message buffer.
+Switch: `git_panel.bolt_panel` (true = Bolt's panel, false = Zed's). Chosen over restyling `git_panel.rs` because that
+file is upstream's hottest (46 commits / 3 months).
+- 🚧 v1 (2026-10-14): header CHANGES with Commit ✓, Undo Last Commit, Merge Branch…, "…" menu (Pull, Push, Clone,
+  Checkout to…, Fetch; Commit / Changes / Pull, Push / Branch / Remote / Stash (all VS Code entries incl. Drop All
+  Stashes) / Worktrees submenus); single-line message input (`Message (⌘⏎ to commit on "<branch>")`, enter/⌘⏎
+  commit); Commit button + dropdown (Commit, Amend, Commit & Push, Commit & Sync); sections Merge Changes / Staged
+  Changes / Changes with counts and hover actions (+ / − / discard all); rows with file icon, name, dir, colored status
+  letter (VS Code letters), hover open file / discard / + / −, tooltip "path • Index Modified"; click = single-file
+  diff (Zed SoloDiffView); change-count badge on the activity bar icon; `ctrl-shift-g`.
+- 🚧 Merge Branch…: branch picker (relative date + last commit) → `git merge --no-commit --no-ff` (user's alias).
+- ⏳ View & Sort (tree/list, sort), Tags (no core support), Show Git Output, branch picker extras ("Create new branch
+  from…", "Checkout detached…"), keyboard navigation in the list, partial staging UX.
+- ⛔ Commit graph: Zed's stays available from the command palette, no button in Bolt's panel (off by default).
 
 ### P2 — Search in sidebar
 - ✅ Spec: `notes/vscode-search-parity.md`
@@ -173,6 +174,11 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `assets/settings/initial_user_settings.json` | template emptied (no theme/font overrides) | Zed's template forced One Dark when Bolt first wrote the user settings file (e.g. "Hide Button") |
 | `assets/settings/default.json` (user prefs) | user's Zed settings imported as defaults (marked `BOLT: user preference`): fonts (Google Sans Mono 14/450, UI 15), hard tabs, line length 150, VSCode base keymap, autosave on focus change, quit on last window closed, terminal (font 13, bar cursor blinking, env vars), git panel (group by staging, file icons), blame without avatar, file types, vtsls `updateImportsOnFileMove: never` | user request |
 | `assets/keymaps/default-macos.json` (user prefs) | block at the end: `cmd-ò` → terminal panel, `cmd-k` → toggle comments | user request |
+| `Cargo.toml`, `crates/zed/{Cargo.toml,src/main.rs,src/zed.rs}` (scm) | `bolt_scm` crate: member, dep, `init`, panel load/add | source control panel wiring |
+| `crates/settings_content/src/settings_content.rs`, `crates/git_ui/src/git_panel_settings.rs`, `assets/settings/default.json` | `git_panel.bolt_panel` (default true) | Bolt vs Zed git panel switch |
+| `crates/git_ui/src/git_ui.rs` | `pub fn bolt_panel_enabled` | read the switch from bolt_scm |
+| `crates/git_ui/src/git_panel.rs` | `GitStatusEntry::bolt_new`; `icon()` hidden when `bolt_panel` | single-file diff from bolt_scm; Zed panel stays loaded (its workspace git actions need it) but buttonless |
+| `assets/keymaps/default-macos.json` (scm) | `ctrl-shift-g` → `bolt_scm::ToggleFocus`; `BoltScmCommit > Editor`: enter / cmd-enter → `bolt_scm::Commit` | shortcuts |
 | `crates/title_bar/src/bolt_project_status.rs` (2) | folder icon before the footer project name; repo button (GitHub/GitLab/Bitbucket icon) opening the `origin` web page, hidden without a remote | user request |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
@@ -201,3 +207,4 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: footer repo button + folder icon; search live refresh; fixed theme reset caused by Zed's initial
   user settings template.
 - 2026-10-14: user's Zed settings + keybindings imported as Bolt defaults (AI/collab/theme/dock-right ones skipped).
+- 2026-10-14: source control panel v1 (P1) + Merge Branch; `git_panel.bolt_panel` switch.

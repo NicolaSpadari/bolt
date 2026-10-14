@@ -1026,6 +1026,16 @@ pub struct GitStatusEntry {
 }
 
 impl GitStatusEntry {
+    // BOLT: lets the bolt_scm panel open a single-file diff (`SoloDiffView::open_or_focus`).
+    pub fn bolt_new(repo_path: RepoPath, status: FileStatus) -> Self {
+        Self {
+            repo_path,
+            staging: status.staging(),
+            status,
+            diff_stat: None,
+        }
+    }
+
     fn display_name(&self, path_style: PathStyle) -> String {
         self.repo_path
             .file_name()
@@ -9263,9 +9273,9 @@ impl Panel for GitPanel {
     }
 
     fn icon(&self, _: &Window, cx: &App) -> Option<ui::IconName> {
-        GitPanelSettings::get_global(cx)
-            .button
-            .then_some(ui::IconName::GitBranch)
+        // BOLT: hidden while Bolt's git panel is enabled.
+        let settings = GitPanelSettings::get_global(cx);
+        (settings.button && !settings.bolt_panel).then_some(ui::IconName::GitBranch)
     }
 
     fn icon_tooltip(&self, _window: &Window, _cx: &App) -> Option<&'static str> {

@@ -60,6 +60,12 @@ pub mod unstaged_diff;
 pub use blame_ui::GitBlameStatus;
 pub use conflict_view::MergeConflictIndicator;
 
+// BOLT: whether Bolt's VS Code-style git panel replaces Zed's one (`git_panel.bolt_panel`).
+pub fn bolt_panel_enabled(cx: &App) -> bool {
+    use settings::Settings as _;
+    git_panel_settings::GitPanelSettings::get_global(cx).bolt_panel
+}
+
 pub fn init(cx: &mut App) {
     editor::set_blame_renderer(blame_ui::GitBlameRenderer, cx);
     commit_view::init(cx);

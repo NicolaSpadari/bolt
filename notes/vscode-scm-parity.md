@@ -32,4 +32,15 @@ Target: behave like VS Code's built-in Git SCM view (`extensions/git` + `src/vs/
 
 Notes
 - AI "generate commit message": out of scope (Bolt has no AI, see `minimal-strip.md`).
+- User spec (2026-10-14, screenshots): header "CHANGES" with icons (view as tree/list, commit ✓, refresh ↻, "…");
+  commit message is a single-line input (not a textarea) with placeholder `Message (⌘⏎ to commit on "<branch>")`;
+  full-width "✓ Commit" button with a dropdown chevron; sections "Staged Changes" / "Changes" with counts; rows: file
+  icon, name, hover actions open file / discard ↺ / stage + (unstage − in Staged), colored status letter; hovering a
+  row shows a tooltip with the full path + status ("Index Modified"). "…" menu as VS Code: View & Sort ›, Pull, Push,
+  Clone, Checkout to…, Fetch, Commit ›, Changes ›, Pull/Push ›, Branch ›, Remote ›, Stash › (Stash, Stash (Include
+  Untracked), Stash Staged, Apply Latest Stash, Apply Stash…, Pop Latest Stash, Pop Stash…, Drop Stash…, Drop All
+  Stashes…, View Stash…), Tags ›, Worktrees ›, Show Git Output.
+- Clicking the branch (status bar) opens a picker with "Create new branch…", "Create new branch from…", "Checkout
+  detached…", then branches with relative date and last commit.
+- Git graph: keep Zed's, but off by default (user does not use it).
 - Before implementing, verify each VS Code behavior on a real VS Code install (user has it) rather than from memory.

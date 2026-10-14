@@ -760,7 +760,7 @@
       "cmd-shift-m": "diagnostics::Deploy",
       "cmd-shift-e": "project_panel::ToggleFocus",
       "cmd-shift-b": "outline_panel::ToggleFocus",
-      "ctrl-shift-g": "git_panel::ToggleFocus",
+      "ctrl-shift-g": "bolt_scm::ToggleFocus",
       "cmd-shift-d": "debug_panel::ToggleFocus",
       "cmd-?": "agent::ToggleFocus",
       "cmd-alt-s": "workspace::SaveAll",
@@ -1781,6 +1781,14 @@
     "context": "Editor",
     "bindings": {
       "cmd-k": ["editor::ToggleComments", { "advance_downwards": false }],
+    },
+  },
+  // BOLT: commit from the source control message input.
+  {
+    "context": "BoltScmCommit > Editor",
+    "bindings": {
+      "enter": "bolt_scm::Commit",
+      "cmd-enter": "bolt_scm::Commit",
     },
   },
 ]

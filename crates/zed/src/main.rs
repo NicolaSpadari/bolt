@@ -749,6 +749,8 @@ fn main() {
         outline_panel::init(cx);
         // BOLT: VS Code-style sidebar search.
         bolt_search_panel::init(cx);
+        // BOLT: VS Code-style source control panel.
+        bolt_scm::init(cx);
         tasks_ui::init(cx);
         snippets_ui::init(cx);
         channel::init(&app_state.client.clone(), app_state.user_store.clone(), cx);

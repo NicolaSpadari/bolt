@@ -732,6 +732,10 @@ pub struct GitPanelSettingsContent {
     ///
     /// Default: true
     pub button: Option<bool>,
+    /// BOLT: show Bolt's VS Code-style git panel instead of Zed's one (which keeps running hidden).
+    ///
+    /// Default: true
+    pub bolt_panel: Option<bool>,
     /// Where to dock the panel.
     ///
     /// Default: right (Agentic layout), left (Classic layout)
