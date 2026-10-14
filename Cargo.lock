@@ -2373,6 +2373,7 @@ dependencies = [
  "project",
  "settings",
  "theme",
+ "theme_settings",
  "ui",
  "util",
  "workspace",

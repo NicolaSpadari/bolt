@@ -9251,6 +9251,10 @@ impl Editor {
         options: RowHighlightOptions,
         cx: &mut Context<Self>,
     ) {
+        // BOLT: merge conflicts are drawn in the scrollbar.
+        if TypeId::of::<T>() == TypeId::of::<ConflictsOuter>() {
+            self.scrollbar_marker_state.dirty = true;
+        }
         let snapshot = self.buffer().read(cx).snapshot(cx);
         let row_highlights = self.highlighted_rows.entry(TypeId::of::<T>()).or_default();
         let ix = row_highlights.binary_search_by(|highlight| {
@@ -9329,6 +9333,10 @@ impl Editor {
         ranges_to_remove: Vec<Range<Anchor>>,
         cx: &mut Context<Self>,
     ) {
+        // BOLT: merge conflicts are drawn in the scrollbar.
+        if TypeId::of::<T>() == TypeId::of::<ConflictsOuter>() {
+            self.scrollbar_marker_state.dirty = true;
+        }
         let snapshot = self.buffer().read(cx).snapshot(cx);
         let row_highlights = self.highlighted_rows.entry(TypeId::of::<T>()).or_default();
         let mut ranges_to_remove = ranges_to_remove.iter().peekable();

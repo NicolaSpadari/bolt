@@ -37,7 +37,7 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - Ignore upstream `.rules` "HARD RULE" about adding a banner to README.md (meant for upstream PRs).
 
 ### Open Issues
-- `cargo test -p project_panel`: 2 layout tests fail since the Bolt layout changes; other crates' tests not run.
+- `cargo test -p project_panel`: 3 tests fail only because of Bolt defaults (font size, dock left, autosave); not bugs.
 - Remaining P1 items: View & Sort (tree/list), Tags (no core support), Show Git Output, "Checkout detached…",
   keyboard navigation in the SCM list (see PROGRESS P1).
 - `~/.config/bolt/settings.json` contains `diagnostics.button: false` (user hid it; ask if unintended).

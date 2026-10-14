@@ -8,22 +8,23 @@
 
 mod merge_picker;
 
-use std::{ops::Range, path::Path, sync::Arc};
+use std::ops::Range;
 
 use anyhow::Result;
 use askpass::AskPassDelegate;
-use editor::{Editor, EditorMode};
+use editor::{Editor, EditorElement, EditorMode, EditorStyle};
 use file_icons::FileIcons;
 use git::{
     repository::{CommitOptions, RepoPath},
-    status::{FileStatus, StatusCode},
+    status::FileStatus,
 };
 use git_ui::{git_panel::GitStatusEntry, solo_diff_view::SoloDiffView};
 use git_ui_core::{askpass_modal::AskPassModal, notifications::show_error_toast};
 use gpui::{
     Action, AnyElement, App, AsyncWindowContext, ClickEvent, Context, Entity, EventEmitter,
     FocusHandle, Focusable, KeyContext, Pixels, PromptLevel, Render, SharedString, Subscription,
-    Task, UniformListScrollHandle, WeakEntity, Window, actions, px, uniform_list,
+    Task, TextStyle, UniformListScrollHandle, WeakEntity, Window, actions, px, relative, rems,
+    uniform_list,
 };
 use multi_buffer::MultiBuffer;
 use project::{
@@ -31,9 +32,13 @@ use project::{
     git_store::{GitStoreEvent, Repository, RepositoryEvent},
 };
 use theme::ActiveTheme as _;
+use settings::Settings as _;
+use theme_settings::ThemeSettings;
+use settings::StatusStyle;
 use ui::{
-    ButtonLike, ContextMenu, Icon, IconButton, IconName, IconSize, Label, LabelSize, ListItem,
-    ListItemSpacing, PopoverMenu, Tooltip, prelude::*,
+    ButtonLike, ButtonStyle, ContextMenu, ElevationIndex, Icon, IconButton, IconName, IconSize,
+    Label, LabelSize, PopoverMenu, PopoverMenuHandle, SplitButton, SplitButtonStyle, Tab, TintColor,
+    Tooltip, prelude::*, rems_from_px,
 };
 use util::ResultExt as _;
 use workspace::{
@@ -43,6 +48,8 @@ use workspace::{
 
 const SCM_PANEL_KEY: &str = "BoltScmPanel";
 const MERGE_ICON: &str = "icons/bolt/git_merge.svg";
+// Zed's git panel row height.
+const LIST_ITEM_HEIGHT: gpui::Rems = gpui::rems(1.75);
 
 actions!(
     bolt_scm,
@@ -129,6 +136,7 @@ pub struct ScmPanel {
     selected: Option<Row>,
     scroll_handle: UniformListScrollHandle,
     pending_commit: Option<Task<()>>,
+    commit_menu_handle: PopoverMenuHandle<ContextMenu>,
     open_commit_buffer: Option<Task<()>>,
     _subscriptions: Vec<Subscription>,
 }
@@ -186,6 +194,7 @@ impl ScmPanel {
                 selected: None,
                 scroll_handle: UniformListScrollHandle::new(),
                 pending_commit: None,
+                commit_menu_handle: PopoverMenuHandle::default(),
                 open_commit_buffer: None,
                 _subscriptions: vec![subscription, settings_subscription],
             };
@@ -268,9 +277,8 @@ impl ScmPanel {
                     repo_path: status_entry.repo_path.clone(),
                     status: status_entry.status,
                 };
-                if status_entry.status.is_conflicted()
-                    || repository.had_conflict_on_last_merge_head_change(&status_entry.repo_path)
-                {
+                // Unlike Zed's panel, resolved conflicts leave the section once staged (VS Code behavior).
+                if status_entry.status.is_conflicted() {
                     merge.push(entry);
                     continue;
                 }
@@ -452,6 +460,16 @@ impl ScmPanel {
             return;
         };
         self.selected = Some(Row::Entry(section_ix, entry_ix));
+        let in_merge = self
+            .sections
+            .get(section_ix)
+            .is_some_and(|section| section.kind == SectionKind::Merge);
+        if in_merge {
+            // Zed's conflict actions (Accept Current / Incoming / Both) only exist in the plain file editor.
+            self.open_file(&entry, window, cx);
+            cx.notify();
+            return;
+        }
         if entry.status.is_deleted() || entry.status.is_untracked() {
             // Nothing to diff against on one side: open the file itself when it exists.
             if !entry.status.is_deleted() {
@@ -749,23 +767,25 @@ impl ScmPanel {
     fn render_header(&self, cx: &Context<Self>) -> impl IntoElement {
         h_flex()
             .w_full()
-            .h_8()
-            .px_2()
+            .flex_none()
+            .h(Tab::container_height(cx))
+            .pl_2p5()
+            .pr_2()
             .justify_between()
-            .child(
-                Label::new("CHANGES")
-                    .size(LabelSize::Small)
-                    .color(Color::Muted),
-            )
+            .border_b_1()
+            .border_color(cx.theme().colors().border)
+            .child(Label::new("Changes").size(LabelSize::Small).color(Color::Muted))
             .child(
                 h_flex()
                     .gap_0p5()
                     .child(
-                        IconButton::new("bolt-scm-commit", IconName::Check)
+                        IconButton::new("bolt-scm-refresh", IconName::RotateCw)
                             .icon_size(IconSize::Small)
-                            .tooltip(Tooltip::text("Commit"))
-                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                                this.commit(&Commit, window, cx)
+                            .tooltip(Tooltip::text("Refresh"))
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                                if let Some(repository) = &this.repository {
+                                    repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
+                                }
                             })),
                     )
                     .child(
@@ -800,16 +820,17 @@ impl ScmPanel {
             .is_some_and(|editor| editor.focus_handle(cx).contains_focused(window, cx));
         let committing = self.pending_commit.is_some();
         let panel = cx.entity().downgrade();
+        let commit_menu_open = self.commit_menu_handle.is_deployed();
         v_flex()
             .w_full()
-            .px_2()
-            .pb_2()
+            .flex_none()
+            .p_2()
             .gap_1p5()
             .child(
                 div()
                     .key_context("BoltScmCommit")
                     .w_full()
-                    .h_7()
+                    .h(px(26.))
                     .px_1p5()
                     .flex()
                     .items_center()
@@ -817,37 +838,54 @@ impl ScmPanel {
                     .border_1()
                     .border_color(if focused { colors.border_focused } else { colors.border })
                     .bg(colors.editor_background)
-                    .children(self.commit_editor.clone()),
+                    .overflow_hidden()
+                    .children(self.commit_editor.as_ref().map(|editor| {
+                        EditorElement::new(editor, commit_input_style(cx))
+                    })),
             )
             .child(
-                h_flex()
-                    .w_full()
-                    .rounded_sm()
-                    .bg(colors.element_background)
-                    .child(
-                        ButtonLike::new("bolt-scm-commit-button")
-                            .full_width()
-                            .disabled(committing)
-                            .child(
-                                h_flex()
-                                    .w_full()
-                                    .justify_center()
-                                    .gap_1()
-                                    .child(Icon::new(IconName::Check).size(IconSize::Small))
-                                    .child(Label::new(if committing { "Committing…" } else { "Commit" })),
-                            )
-                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                                this.commit(&Commit, window, cx)
-                            })),
-                    )
-                    .child(div().h_4().w_px().bg(colors.border))
-                    .child(
-                        PopoverMenu::new("bolt-scm-commit-options")
+                SplitButton::new(
+                    ButtonLike::new_rounded_left("bolt-scm-commit-button")
+                        .layer(ElevationIndex::ModalSurface)
+                        .full_width()
+                        .disabled(committing)
+                        .child(
+                            h_flex().w_full().justify_center().child(
+                                Label::new(if committing {
+                                    "Committing…"
+                                } else if self.has_staged() {
+                                    "Commit"
+                                } else {
+                                    "Commit Tracked"
+                                })
+                                .size(LabelSize::Small)
+                                .color(if committing { Color::Disabled } else { Color::Default }),
+                            ),
+                        )
+                        .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                            this.commit(&Commit, window, cx)
+                        })),
+                    PopoverMenu::new("bolt-scm-commit-options")
                             .trigger(
-                                IconButton::new("bolt-scm-commit-options-button", IconName::ChevronDown)
-                                    .icon_size(IconSize::Small),
+                                ButtonLike::new_rounded_right("bolt-scm-commit-options-button")
+                                    .layer(ElevationIndex::ModalSurface)
+                                    .selected_style(ButtonStyle::Tinted(TintColor::Accent))
+                                    .width(rems_from_px(20_f32))
+                                    .child(
+                                        Icon::new(if commit_menu_open {
+                                            IconName::ChevronUp
+                                        } else {
+                                            IconName::ChevronDown
+                                        })
+                                        .size(IconSize::XSmall),
+                                    ),
                             )
+                            .with_handle(self.commit_menu_handle.clone())
                             .anchor(gpui::Anchor::TopRight)
+                            .offset(gpui::Point {
+                                x: px(0.),
+                                y: px(2.),
+                            })
                             .menu(move |window, cx| {
                                 let panel = panel.clone();
                                 Some(ContextMenu::build(window, cx, move |menu, _, _| {
@@ -872,8 +910,10 @@ impl ScmPanel {
                                     let menu = entry("Commit & Push", CommitOptions::default(), AfterCommit::Push)(menu);
                                     entry("Commit & Sync", CommitOptions::default(), AfterCommit::Sync)(menu)
                                 }))
-                            }),
-                    ),
+                            })
+                            .into_any_element(),
+                )
+                .style(SplitButtonStyle::Outlined),
             )
     }
 
@@ -895,9 +935,10 @@ impl ScmPanel {
                 let entries = entries.clone();
                 this.child(
                     IconButton::new("bolt-scm-discard-all", IconName::Undo)
-                        .icon_size(IconSize::XSmall)
+                        .icon_size(IconSize::Small)
                         .tooltip(Tooltip::text("Discard All Changes"))
                         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                            cx.stop_propagation();
                             this.discard(entries.clone(), window, cx)
                         })),
                 )
@@ -905,41 +946,66 @@ impl ScmPanel {
             .map(|this| match kind {
                 SectionKind::Staged => this.child(
                     IconButton::new("bolt-scm-unstage-all", IconName::Dash)
-                        .icon_size(IconSize::XSmall)
+                        .icon_size(IconSize::Small)
                         .tooltip(Tooltip::text("Unstage All Changes"))
                         .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                            cx.stop_propagation();
                             let paths = this.section_paths(SectionKind::Staged);
                             this.stage(paths, false, cx)
                         })),
                 ),
                 SectionKind::Changes | SectionKind::Merge => this.child(
                     IconButton::new(("bolt-scm-stage-all", section_ix), IconName::Plus)
-                        .icon_size(IconSize::XSmall)
+                        .icon_size(IconSize::Small)
                         .tooltip(Tooltip::text("Stage All Changes"))
                         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            cx.stop_propagation();
                             let paths = this.section_paths(kind);
                             this.stage(paths, true, cx)
                         })),
                 ),
             });
         let group: SharedString = format!("bolt-scm-section-{section_ix}").into();
-        ListItem::new(("bolt-scm-section", section_ix))
-            .group_name(group.clone())
-            .spacing(ListItemSpacing::Sparse)
-            .toggle(Some(!collapsed))
-            .on_toggle(
-                cx.listener(move |this, _: &ClickEvent, _, cx| this.toggle_section(kind, cx)),
-            )
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.toggle_section(kind, cx)))
+        h_flex()
+            .id(("bolt-scm-section", section_ix))
+            .group(group.clone())
+            .h(LIST_ITEM_HEIGHT)
+            .w_full()
+            .pl_2p5()
+            .pr_1()
+            .gap_2()
+            .justify_between()
+            .cursor_pointer()
+            .hover(|style| style.bg(cx.theme().colors().ghost_element_hover))
             .child(
                 h_flex()
-                    .w_full()
                     .gap_1()
-                    .child(Label::new(kind.title()).size(LabelSize::Small))
-                    .child(div().flex_1())
-                    .child(div().visible_on_hover(group).child(actions))
-                    .child(count_badge(section.entries.len(), cx)),
+                    .child(
+                        Icon::new(if collapsed {
+                            IconName::ChevronRight
+                        } else {
+                            IconName::ChevronDown
+                        })
+                        .size(IconSize::XSmall)
+                        .color(Color::Muted),
+                    )
+                    .child(
+                        Label::new(kind.title())
+                            .color(Color::Muted)
+                            .size(LabelSize::Small),
+                    ),
             )
+            .child(
+                h_flex()
+                    .gap_1()
+                    .child(div().visible_on_hover(group).child(actions))
+                    .child(
+                        Label::new(section.entries.len().to_string())
+                            .color(Color::Muted)
+                            .size(LabelSize::Small),
+                    ),
+            )
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.toggle_section(kind, cx)))
             .into_any_element()
     }
 
@@ -961,29 +1027,53 @@ impl ScmPanel {
         let kind = section.kind;
         let entry = section.entries[entry_ix].clone();
         let path_style = util::paths::PathStyle::local();
-        let path: Arc<Path> = Arc::from(entry.repo_path.as_std_path());
+        let status = entry.status;
         let file_name: SharedString = entry
             .repo_path
             .file_name()
             .unwrap_or_default()
             .to_string()
             .into();
-        let directory: SharedString = entry
+        let directory = entry
             .repo_path
             .parent()
             .map(|parent| parent.display(path_style).to_string())
-            .unwrap_or_default()
-            .into();
-        let (letter, color, description) = status_letter(entry.status, kind);
-        let is_deleted = letter == "D";
-        let icon = FileIcons::get_icon(&path, cx).map(|icon| {
-            Icon::from_path(icon)
+            .filter(|parent| !parent.is_empty());
+        let is_deleted = status.is_deleted();
+        let (status_style, file_icons) = git_ui::bolt_panel_entry_style(cx);
+        // Same colors as Zed's git panel entries.
+        let label_color = if status_style == StatusStyle::LabelColor {
+            if status.is_conflicted() || kind == SectionKind::Merge {
+                Color::VersionControlConflict
+            } else if status.is_created() {
+                Color::VersionControlAdded
+            } else if status.is_modified() {
+                Color::VersionControlModified
+            } else if is_deleted {
+                Color::Disabled
+            } else {
+                Color::VersionControlAdded
+            }
+        } else {
+            Color::Default
+        };
+        let path_color = if is_deleted {
+            Color::Disabled
+        } else {
+            Color::Muted
+        };
+        let file_icon = file_icons.then(|| {
+            FileIcons::get_icon(entry.repo_path.as_std_path(), cx)
+                .map(Icon::from_path)
+                .unwrap_or_else(|| Icon::new(IconName::File))
                 .size(IconSize::Small)
                 .color(Color::Muted)
         });
         let id = section_ix * 1_000_000 + entry_ix;
         let group: SharedString = format!("bolt-scm-entry-{id}").into();
-        let tooltip = format!("{} • {description}", entry.repo_path.display(path_style));
+        let selected = self.selected == Some(Row::Entry(section_ix, entry_ix));
+        let colors = cx.theme().colors();
+        let info_color = cx.theme().status().info;
 
         let open_entry = entry.clone();
         let discard_entry = entry.clone();
@@ -993,9 +1083,10 @@ impl ScmPanel {
             .when(!is_deleted, |this| {
                 this.child(
                     IconButton::new(("bolt-scm-open-file", id), IconName::File)
-                        .icon_size(IconSize::XSmall)
+                        .icon_size(IconSize::Small)
                         .tooltip(Tooltip::text("Open File"))
                         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                            cx.stop_propagation();
                             this.open_file(&open_entry, window, cx)
                         })),
                 )
@@ -1003,64 +1094,82 @@ impl ScmPanel {
             .when(kind == SectionKind::Changes, |this| {
                 this.child(
                     IconButton::new(("bolt-scm-discard", id), IconName::Undo)
-                        .icon_size(IconSize::XSmall)
+                        .icon_size(IconSize::Small)
                         .tooltip(Tooltip::text("Discard Changes"))
                         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                            cx.stop_propagation();
                             this.discard(vec![discard_entry.clone()], window, cx)
                         })),
                 )
             })
             .child(match kind {
                 SectionKind::Staged => IconButton::new(("bolt-scm-unstage", id), IconName::Dash)
-                    .icon_size(IconSize::XSmall)
+                    .icon_size(IconSize::Small)
                     .tooltip(Tooltip::text("Unstage Changes"))
                     .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                        cx.stop_propagation();
                         this.stage(vec![stage_path.clone()], false, cx)
                     })),
                 SectionKind::Changes | SectionKind::Merge => {
                     IconButton::new(("bolt-scm-stage", id), IconName::Plus)
-                        .icon_size(IconSize::XSmall)
+                        .icon_size(IconSize::Small)
                         .tooltip(Tooltip::text("Stage Changes"))
                         .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            cx.stop_propagation();
                             this.stage(vec![stage_path.clone()], true, cx)
                         }))
                 }
             });
 
-        ListItem::new(("bolt-scm-entry", id))
-            .group_name(group.clone())
-            .spacing(ListItemSpacing::Sparse)
-            .indent_level(1)
-            .indent_step_size(px(12.))
-            .toggle_state(self.selected == Some(Row::Entry(section_ix, entry_ix)))
-            .tooltip(Tooltip::text(tooltip))
-            .start_slot::<Icon>(icon)
+        let name_row = h_flex()
+            .min_w_0()
+            .flex_1()
+            .gap_1()
+            .children(file_icon)
+            .when(status_style != StatusStyle::LabelColor, |this| {
+                this.child(git_ui::git_status_icon(status))
+            })
             .child(
                 h_flex()
-                    .w_full()
                     .min_w_0()
-                    .gap_1p5()
+                    .overflow_hidden()
                     .child(
-                        Label::new(file_name)
-                            .size(LabelSize::Small)
-                            .color(color)
-                            .when(is_deleted, |label| label.strikethrough()),
+                        div().flex_none().child(
+                            Label::new(format!("{file_name} "))
+                                .single_line()
+                                .color(label_color)
+                                .when(is_deleted, Label::strikethrough),
+                        ),
                     )
-                    .child(
-                        Label::new(directory)
-                            .size(LabelSize::XSmall)
-                            .color(Color::Muted)
-                            .truncate(),
-                    )
-                    .child(div().flex_1())
-                    .child(div().visible_on_hover(group).child(actions))
-                    .child(
-                        div()
-                            .w_3()
-                            .flex_none()
-                            .child(Label::new(letter).size(LabelSize::Small).color(color)),
-                    ),
-            )
+                    .when_some(directory, |this, directory| {
+                        this.child(
+                            Label::new(directory)
+                                .single_line()
+                                .color(path_color)
+                                .truncate_start()
+                                .when(is_deleted, Label::strikethrough),
+                        )
+                    }),
+            );
+
+        h_flex()
+            .id(("bolt-scm-entry", id))
+            .group(group.clone())
+            .h(LIST_ITEM_HEIGHT)
+            .w_full()
+            .pl_2p5()
+            .pr_1()
+            .gap_1p5()
+            .when(selected, |this| this.bg(info_color.alpha(0.08)))
+            .hover(|style| {
+                style.bg(if selected {
+                    info_color.alpha(0.12)
+                } else {
+                    colors.ghost_element_hover
+                })
+            })
+            .child(name_row)
+            .child(div().flex_none().visible_on_hover(group).child(actions))
             .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
                 this.open_diff(section_ix, entry_ix, window, cx)
             }))
@@ -1068,51 +1177,24 @@ impl ScmPanel {
     }
 }
 
-fn count_badge(count: usize, cx: &App) -> impl IntoElement {
-    div()
-        .px_1p5()
-        .rounded_full()
-        .bg(cx.theme().colors().element_background)
-        .child(
-            Label::new(count.to_string())
-                .size(LabelSize::XSmall)
-                .color(Color::Muted),
-        )
-}
-
-/// VS Code's status letter, color and tooltip description for a file in a section.
-fn status_letter(status: FileStatus, kind: SectionKind) -> (&'static str, Color, &'static str) {
-    match status {
-        FileStatus::Untracked => ("U", Color::VersionControlAdded, "Untracked"),
-        FileStatus::Ignored => ("I", Color::Ignored, "Ignored"),
-        FileStatus::Unmerged(_) => ("!", Color::VersionControlConflict, "Conflict"),
-        FileStatus::Tracked(tracked) => {
-            if kind == SectionKind::Merge {
-                return ("!", Color::VersionControlConflict, "Conflict");
-            }
-            let staged = kind == SectionKind::Staged;
-            let code = if staged {
-                tracked.index_status
-            } else {
-                tracked.worktree_status
-            };
-            match (code, staged) {
-                (StatusCode::Added, true) => ("A", Color::VersionControlAdded, "Index Added"),
-                (StatusCode::Added, false) => ("A", Color::VersionControlAdded, "Added"),
-                (StatusCode::Deleted, true) => ("D", Color::VersionControlDeleted, "Index Deleted"),
-                (StatusCode::Deleted, false) => ("D", Color::VersionControlDeleted, "Deleted"),
-                (StatusCode::Renamed, true) => {
-                    ("R", Color::VersionControlModified, "Index Renamed")
-                }
-                (StatusCode::Renamed, false) => ("R", Color::VersionControlModified, "Renamed"),
-                (StatusCode::Copied, _) => ("C", Color::VersionControlModified, "Copied"),
-                (StatusCode::TypeChanged, _) => {
-                    ("T", Color::VersionControlModified, "Type Changed")
-                }
-                (_, true) => ("M", Color::VersionControlModified, "Index Modified"),
-                (_, false) => ("M", Color::VersionControlModified, "Modified"),
-            }
-        }
+/// UI font at VS Code's input size (13px), so the commit message input matches the panel text.
+fn commit_input_style(cx: &App) -> EditorStyle {
+    let settings = ThemeSettings::get_global(cx);
+    EditorStyle {
+        background: cx.theme().colors().editor_background,
+        local_player: cx.theme().players().local(),
+        text: TextStyle {
+            color: cx.theme().colors().text,
+            font_family: settings.ui_font.family.clone(),
+            font_features: settings.ui_font.features.clone(),
+            font_fallbacks: settings.ui_font.fallbacks.clone(),
+            font_size: rems(0.8125).into(),
+            font_weight: settings.ui_font.weight,
+            line_height: relative(1.3),
+            ..TextStyle::default()
+        },
+        syntax: cx.theme().syntax().clone(),
+        ..EditorStyle::default()
     }
 }
 

@@ -6347,6 +6347,17 @@ impl EditorElement {
 
             let scrollbar_layout = scrollbar_layout.clone();
             let background_highlights = editor.background_highlights.clone();
+            // BOLT: merge conflicts are drawn in the scrollbar.
+            let conflict_ranges: Vec<Range<Anchor>> = editor
+                .highlighted_rows
+                .get(&TypeId::of::<ConflictsOuter>())
+                .map(|highlights| {
+                    highlights
+                        .iter()
+                        .map(|highlight| highlight.range.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
             let snapshot = layout.position_map.snapshot.clone();
             let theme = cx.theme().clone();
 
@@ -6430,6 +6441,30 @@ impl EditorElement {
                                     marker_quads.extend(
                                         scrollbar_layout
                                             .marker_quads_for_ranges(marker_row_ranges, Some(1)),
+                                    );
+                                }
+                            }
+
+                            // BOLT: full-width conflict markers, so conflicts are easy to find in long files.
+                            if is_singleton {
+                                let conflict_color = theme.colors().version_control_conflict;
+                                for column in 0..3 {
+                                    let marker_row_ranges = conflict_ranges.iter().map(|range| {
+                                        ColoredRange {
+                                            start: range
+                                                .start
+                                                .to_display_point(&snapshot.display_snapshot)
+                                                .row(),
+                                            end: range
+                                                .end
+                                                .to_display_point(&snapshot.display_snapshot)
+                                                .row(),
+                                            color: conflict_color,
+                                        }
+                                    });
+                                    marker_quads.extend(
+                                        scrollbar_layout
+                                            .marker_quads_for_ranges(marker_row_ranges, Some(column)),
                                     );
                                 }
                             }

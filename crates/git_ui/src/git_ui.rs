@@ -66,6 +66,13 @@ pub fn bolt_panel_enabled(cx: &App) -> bool {
     git_panel_settings::GitPanelSettings::get_global(cx).bolt_panel
 }
 
+// BOLT: Zed's git panel status style and file icons setting, so Bolt's panel renders entries the same way.
+pub fn bolt_panel_entry_style(cx: &App) -> (settings::StatusStyle, bool) {
+    use settings::Settings as _;
+    let settings = git_panel_settings::GitPanelSettings::get_global(cx);
+    (settings.status_style, settings.file_icons)
+}
+
 pub fn init(cx: &mut App) {
     editor::set_blame_renderer(blame_ui::GitBlameRenderer, cx);
     commit_view::init(cx);

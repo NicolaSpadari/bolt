@@ -346,7 +346,8 @@ fn render_conflict_buttons(
         .gap_1()
         .bg(cx.theme().colors().editor_background)
         .child(
-            Button::new("head", format!("Use {}", conflict.ours_branch_name))
+            // BOLT: VS Code wording for the conflict actions.
+            Button::new("head", "Accept Current Change")
                 .label_size(LabelSize::Small)
                 .on_click({
                     let editor = editor.clone();
@@ -365,7 +366,7 @@ fn render_conflict_buttons(
                 }),
         )
         .child(
-            Button::new("origin", format!("Use {}", conflict.theirs_branch_name))
+            Button::new("origin", "Accept Incoming Change")
                 .label_size(LabelSize::Small)
                 .on_click({
                     let editor = editor.clone();
@@ -384,7 +385,7 @@ fn render_conflict_buttons(
                 }),
         )
         .child(
-            Button::new("both", "Use Both")
+            Button::new("both", "Accept Both Changes")
                 .label_size(LabelSize::Small)
                 .on_click({
                     let editor = editor.clone();

@@ -1727,7 +1727,7 @@
   // Diagnostics configuration.
   "diagnostics": {
     // Whether to show the project diagnostics button in the status bar.
-    "button": true,
+    "button": false,  // BOLT: user preference
     // Whether to show warnings or not by default.
     //
     // Default: true

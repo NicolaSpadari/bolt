@@ -10122,6 +10122,23 @@ impl Repository {
         self.pending_ops = updated;
     }
 
+    // BOLT: re-reads the repository state (statuses, branch, stash) on demand, for the source control panel's Refresh.
+    pub fn bolt_rescan(&mut self, cx: &mut Context<Self>) {
+        let scan_updates_tx =
+            self.git_store()
+                .and_then(|git_store| match &git_store.read(cx).state {
+                    GitStoreState::Local { downstream, .. } => Some(
+                        downstream
+                            .as_ref()
+                            .map(|downstream| downstream.updates_tx.clone()),
+                    ),
+                    _ => None,
+                });
+        if let Some(updates_tx) = scan_updates_tx {
+            self.schedule_scan(updates_tx, cx);
+        }
+    }
+
     fn schedule_scan(
         &mut self,
         updates_tx: Option<mpsc::UnboundedSender<DownstreamUpdate>>,

@@ -25,6 +25,7 @@ menu.workspace = true
 multi_buffer.workspace = true
 project.workspace = true
 theme.workspace = true
+theme_settings.workspace = true
 ui.workspace = true
 util.workspace = true
 workspace.workspace = true

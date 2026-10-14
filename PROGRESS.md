@@ -34,6 +34,9 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
 - **Minimal Bolt**: AI (incl. Threads panel), edit predictions, collab, account, telemetry, crash upload, auto-update
   removed — switched off at the wiring, source kept for cheap merges. Details: `notes/minimal-strip.md`.
 - Zed's git panel is **replaced** by the VS Code-style panel (no setting toggle); reusable `git_ui` parts stay.
+- Stay a plain fork. "Addon + hooks patch" architecture evaluated and parked; Zed has no UI extension API planned
+  soon. Details and upstream links: `notes/addon-architecture.md`.
+- SCM panel: Zed's native UI (fonts, icons, sizing, components), VS Code's experience (layout, actions, wording).
 
 - Keep: Zed extensions (unchanged, zed.dev registry), terminal. Drop: remote dev (SSH/WSL/containers), debugger,
   REPL/Jupyter, vim/helix modes.
@@ -112,8 +115,8 @@ file is upstream's hottest (46 commits / 3 months).
   letter (VS Code letters), hover open file / discard / + / −, tooltip "path • Index Modified"; click = single-file
   diff (Zed SoloDiffView); change-count badge on the activity bar icon; `ctrl-shift-g`.
 - 🚧 Merge Branch…: branch picker (relative date + last commit) → `git merge --no-commit --no-ff` (user's alias).
-- ⏳ View & Sort (tree/list, sort), Tags (no core support), Show Git Output, branch picker extras ("Create new branch
-  from…", "Checkout detached…"), keyboard navigation in the list, partial staging UX.
+- ⛔ View & Sort, Tags, Show Git Output, branch picker extras, keyboard navigation in the list, partial staging UX
+  (user, 2026-10-14: not needed).
 - ⛔ Commit graph: Zed's stays available from the command palette, no button in Bolt's panel (off by default).
 
 ### P2 — Search in sidebar
@@ -178,10 +181,15 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/title_bar/src/title_bar.rs` (2) | project name back in title bar (branch only in status bar), project name `Color::Muted` | user request |
 | `assets/settings/default.json` (2) | `title_bar.show_user_menu: true` again (no account items without sign-in) | user request |
 | `assets/settings/initial_user_settings.json` | template emptied (no theme/font overrides) | Zed's template forced One Dark when Bolt first wrote the user settings file (e.g. "Hide Button") |
-| `assets/settings/default.json` (user prefs) | user's Zed settings imported as defaults (marked `BOLT: user preference`): fonts (Google Sans Mono 14/450, UI 15), hard tabs, line length 150, VSCode base keymap, autosave on focus change, quit on last window closed, terminal (font 13, bar cursor blinking, env vars), git panel (group by staging, file icons), blame without avatar, file types, vtsls `updateImportsOnFileMove: never` | user request |
+| `assets/settings/default.json` (user prefs) | user's Zed settings imported as defaults (marked `BOLT: user preference`): fonts (Google Sans Mono 14/450, UI 15), hard tabs, line length 150, VSCode base keymap, autosave on focus change, quit on last window closed, terminal (font 13, bar cursor blinking, env vars), git panel (group by staging, file icons), blame without avatar, file types, `diagnostics.button: false`, vtsls `updateImportsOnFileMove: never` | user request |
 | `assets/keymaps/default-macos.json` (user prefs) | block at the end: `cmd-ò` → terminal panel, `cmd-k` → toggle comments | user request |
 | `Cargo.toml`, `crates/zed/{Cargo.toml,src/main.rs,src/zed.rs}` (scm) | `bolt_scm` crate: member, dep, `init`, panel load/add | source control panel wiring |
 | `crates/settings_content/src/settings_content.rs`, `crates/git_ui/src/git_panel_settings.rs`, `assets/settings/default.json` | `git_panel.bolt_panel` (default true) | Bolt vs Zed git panel switch |
+| `crates/project/src/git_store.rs` | `Repository::bolt_rescan` (re-reads repo state via `schedule_scan`) | SCM panel Refresh |
+| `crates/git_ui/src/git_ui.rs` | `bolt_panel_entry_style` (exposes `status_style`, `file_icons`) | SCM rows rendered like Zed's |
+| `crates/editor/src/editor.rs`, `crates/editor/src/element.rs` | `ConflictsOuter` row highlights mark scrollbar markers dirty; full-width conflict markers (`version_control_conflict`) in singleton editors | merge conflicts visible in the scrollbar |
+| `crates/git_ui/src/conflict_view.rs` | conflict buttons: Accept Current Change / Accept Incoming Change / Accept Both Changes | VS Code wording |
+| `README.md` | rewritten for Bolt (on sync: keep ours) | user request |
 | `crates/git_ui/src/git_ui.rs` | `pub fn bolt_panel_enabled` | read the switch from bolt_scm |
 | `crates/git_ui/src/git_panel.rs` | `GitStatusEntry::bolt_new`; `icon()` hidden when `bolt_panel` | single-file diff from bolt_scm; Zed panel stays loaded (its workspace git actions need it) but buttonless |
 | `assets/keymaps/default-macos.json` (scm) | `ctrl-shift-g` → `bolt_scm::ToggleFocus`; `BoltScmCommit > Editor`: enter / cmd-enter → `bolt_scm::Commit` | shortcuts |
@@ -216,3 +224,11 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: source control panel v1 (P1) + Merge Branch; `git_panel.bolt_panel` switch.
 - 2026-10-14: first clean release build + Bolt.app (fixed release-only error: WSL actions exist only in debug builds).
 - 2026-10-14: backlog += Cursor-style autocomplete, merge panel. Bolt.app moved to /Applications.
+- 2026-10-14: remaining P1 items dropped (user); `diagnostics.button` off by default.
+- 2026-10-14: `cargo test -p project_panel`: 136 pass, 3 fail (2 layout + `undo_create_dirty_file`). Not bugs: tests load
+  `default.json`, all 3 pass with Zed's values for `ui_font_size`, panel `dock` and `autosave`.
+- 2026-10-14: SCM panel restyled with Zed's native UI (toolbar at tab height, Zed section headers/rows 1.75rem, status
+  icon + colors from `git_panel` settings, outlined split Commit button); Refresh button; conflicted files open in the
+  plain editor (Zed's Use HEAD / Use <branch> / Use Both).
+- 2026-10-14: conflicts in the scrollbar + VS Code conflict wording; resolved conflicts move to Staged once added
+  (Merge section = still conflicted only); header ✓ removed; commit input in UI font 13px.
