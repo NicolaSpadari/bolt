@@ -14,14 +14,15 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
   replaced by ours.
 - 2026-10-14: Zed cloned on v1.23.3 with full history, private repo created on the personal account, first build OK.
 - 2026-10-14: default theme **One Dark Pro Cursor** (user's own, no credits) + **Material Icon Theme** bundled and
-  rendered in color, committed (ec783f4db1). User then said: "do icons and theme, then we decide how to continue".
+  rendered in color, committed (ec783f4db1).
+- 2026-10-14: panels docked left, worktree name hidden; minimal strip (fb529e94b7); activity bar + project/branch in
+  status bar + Restricted Mode off by default (eab5d96d6d).
 
 ### Current State
-- Build: `cargo build` OK (dev). Isolated run: `./target/debug/zed --user-data-dir /tmp/bolt-smoke <path>`.
-- Theme/icons confirmed working by the user. Left-docked panels + hidden worktree name: build + run OK, user check pending
-  (no Screen Recording permission for the
-  terminal: `screencapture` returns only the wallpaper).
-- Upstream touch points so far: 4 files, listed in PROGRESS; all marked `// BOLT:`.
+- Build: `cargo build` OK (dev, 0 warnings). Isolated run: `./target/debug/zed --user-data-dir /tmp/bolt-smoke <path>`.
+- User confirmed: theme/icons, minimal strip. Pending user check: activity bar, project/branch in status bar.
+- I can't see the screen (terminal lacks Screen Recording permission); verify with build + log + `lsof` + user.
+- Upstream touch points: listed in PROGRESS, all marked `BOLT:`.
 
 ### Decisions Made
 - Git identity is repo-local: `Nicola Spadari <spadari.nicola@gmail.com>`; push auth via repo-local credential helper
@@ -31,14 +32,15 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - Ignore upstream `.rules` "HARD RULE" about adding a banner to README.md (meant for upstream PRs).
 
 ### Open Issues
-- Dev builds still log to `~/Library/Logs/Zed/Zed.log` and run Zed's auto-update check even with `--user-data-dir`
-  → fixed by the rebrand/minimal strip.
-- `cargo test` not run yet (some upstream tests may assume default theme "One Dark" / icon theme "Zed (Default)").
+- Dev builds identify as **Stable** (`crates/zed/RELEASE_CHANNEL` = stable): they share Zed's single-instance port
+  (44438), log file `~/Library/Logs/Zed/Zed.log` and keychain service name → fix in the rebrand (do it next).
+- `cargo test` not run yet (upstream tests may assume Zed defaults: theme, docks, status bar items).
+- Activity bar hides when the left dock is zoomed? No: it stays (rendered outside `render_dock`).
 
 ### Next Steps (wait for the user to pick)
-1. User check of left sidebar + hidden worktree name.
-2. Rebrand + isolation (name Bolt, `com.spadari.bolt`, dirs in PROGRESS, CLI name), then minimal strip.
-3. `script/bolt-sync` + release bundle; then P1 gap analysis (`notes/vscode-scm-parity.md`).
+1. User check of activity bar + status bar project/branch.
+2. Rebrand + isolation (name Bolt, `com.spadari.bolt`, own channel/port/dirs/keychain, CLI name).
+3. `script/bolt-sync` + release `.app` bundle; then P1 gap analysis (`notes/vscode-scm-parity.md`).
 
 ### Useful Context
 - Xcode 26 needs `xcodebuild -downloadComponent MetalToolchain` (done) or `gpui_apple` fails.
