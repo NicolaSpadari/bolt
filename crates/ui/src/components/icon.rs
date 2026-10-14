@@ -240,10 +240,9 @@ impl RenderOnce for Icon {
                 .flex_none()
                 .text_color(self.color.color(cx))
                 .into_any_element(),
-            IconSource::EmbeddedImage(path) => img(path)
-                .size(self.size)
-                .flex_none()
-                .into_any_element(),
+            IconSource::EmbeddedImage(path) => {
+                img(path).size(self.size).flex_none().into_any_element()
+            }
         }
     }
 }

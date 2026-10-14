@@ -539,6 +539,8 @@ pub fn init(cx: &mut App) {
         });
     });
 
+    // BOLT: remote development is not part of Bolt.
+    const BOLT_SUGGEST_DEV_CONTAINERS: bool = false;
     // Subscribe to worktree additions to suggest opening the project in a dev container
     cx.observe_new(
         |workspace: &mut Workspace, window: Option<&mut Window>, cx: &mut Context<Workspace>| {
@@ -555,8 +557,10 @@ pub fn init(cx: &mut App) {
                 workspace.project(),
                 window,
                 move |workspace, project, event, window, cx| {
-                    if let project::Event::WorktreeUpdatedEntries(worktree_id, updated_entries) =
-                        event
+                    // BOLT: no dev container suggestions.
+                    if BOLT_SUGGEST_DEV_CONTAINERS
+                        && let project::Event::WorktreeUpdatedEntries(worktree_id, updated_entries) =
+                            event
                     {
                         dev_container_suggest::suggest_on_worktree_updated(
                             workspace,
@@ -1722,36 +1726,39 @@ impl PickerDelegate for RecentProjectsDelegate {
                                 }
                             })
                     })
-                    .child(
-                        ButtonLike::new("open_remote_folder")
-                            .child(
-                                h_flex()
-                                    .w_full()
-                                    .gap_1()
-                                    .justify_between()
-                                    .child(Label::new("Open Remote Folder"))
-                                    .child(KeyBinding::for_action(
-                                        &OpenRemote {
-                                            from_existing_connection: false,
-                                            create_new_window: Some(self.create_new_window),
-                                        },
-                                        cx,
-                                    )),
-                            )
-                            .on_click({
-                                let create_new_window = self.create_new_window;
-                                move |_, window, cx| {
-                                    window.dispatch_action(
-                                        OpenRemote {
-                                            from_existing_connection: false,
-                                            create_new_window: Some(create_new_window),
-                                        }
-                                        .boxed_clone(),
-                                        cx,
-                                    )
-                                }
-                            }),
-                    )
+                    // BOLT: no remote development.
+                    .when(false, |this| {
+                        this.child(
+                            ButtonLike::new("open_remote_folder")
+                                .child(
+                                    h_flex()
+                                        .w_full()
+                                        .gap_1()
+                                        .justify_between()
+                                        .child(Label::new("Open Remote Folder"))
+                                        .child(KeyBinding::for_action(
+                                            &OpenRemote {
+                                                from_existing_connection: false,
+                                                create_new_window: Some(self.create_new_window),
+                                            },
+                                            cx,
+                                        )),
+                                )
+                                .on_click({
+                                    let create_new_window = self.create_new_window;
+                                    move |_, window, cx| {
+                                        window.dispatch_action(
+                                            OpenRemote {
+                                                from_existing_connection: false,
+                                                create_new_window: Some(create_new_window),
+                                            }
+                                            .boxed_clone(),
+                                            cx,
+                                        )
+                                    }
+                                }),
+                        )
+                    })
                     .into_any(),
             );
         }
@@ -1970,14 +1977,6 @@ impl PickerDelegate for RecentProjectsDelegate {
                                                         );
                                                     }
                                                 },
-                                            )
-                                            .action(
-                                                "Open Remote Folder",
-                                                OpenRemote {
-                                                    from_existing_connection: false,
-                                                    create_new_window: Some(create_new_window),
-                                                }
-                                                .boxed_clone(),
                                             )
                                     }
                                 }))

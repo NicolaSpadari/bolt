@@ -878,11 +878,15 @@ fn main() {
 
         cx.activate(true);
 
-        cx.spawn({
-            let client = app_state.client.clone();
-            async move |cx| authenticate(client, cx).await
-        })
-        .detach_and_log_err(cx);
+        // BOLT: never sign in to zed.dev (it would reuse an installed Zed's keychain credentials).
+        const BOLT_SIGN_IN_AT_STARTUP: bool = false;
+        if BOLT_SIGN_IN_AT_STARTUP {
+            cx.spawn({
+                let client = app_state.client.clone();
+                async move |cx| authenticate(client, cx).await
+            })
+            .detach_and_log_err(cx);
+        }
 
         let urls: Vec<_> = args
             .paths_or_urls

@@ -24,7 +24,6 @@ use assets::Assets;
 use breadcrumbs::Breadcrumbs;
 use client::zed_urls;
 use collections::VecDeque;
-use debugger_ui::debugger_panel::DebugPanel;
 use editor::{Editor, MultiBuffer};
 use extension_host::ExtensionStore;
 use feature_flags::{FeatureFlagAppExt as _, PanicFeatureFlag};
@@ -427,6 +426,7 @@ pub fn build_window_options(display_uuid: Option<Uuid>, cx: &mut App) -> WindowO
 }
 
 pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
+    hide_bolt_removed_actions(cx);
     let mut _on_close_subscription = bind_on_window_closed(cx);
     cx.observe_global::<SettingsStore>(move |cx| {
         // A 1.92 regression causes unused-assignment to trigger on this variable.
@@ -780,9 +780,7 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
         let outline_panel = OutlinePanel::load(workspace_handle.clone(), cx.clone());
         let terminal_panel = TerminalPanel::load(workspace_handle.clone(), cx.clone());
         let git_panel = GitPanel::load(workspace_handle.clone(), cx.clone());
-        let channels_panel =
-            collab_ui::collab_panel::CollabPanel::load(workspace_handle.clone(), cx.clone());
-        let debug_panel = DebugPanel::load(workspace_handle.clone(), cx);
+        // BOLT: no collab panel, no debug panel.
 
         async fn add_panel_when_ready(
             panel_task: impl Future<Output = anyhow::Result<Entity<impl workspace::Panel>>> + 'static,
@@ -804,8 +802,6 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
             add_panel_when_ready(outline_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(terminal_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(git_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(channels_panel, workspace_handle.clone(), cx.clone()),
-            add_panel_when_ready(debug_panel, workspace_handle.clone(), cx.clone()),
             initialize_agent_panel(workspace_handle.clone(), cx.clone()).map(|r| r.log_err()),
         );
 
@@ -2401,13 +2397,56 @@ fn is_ai_keybinding(binding: &KeyBinding) -> bool {
 }
 
 fn filter_disabled_ai_bindings(bindings: Vec<KeyBinding>, cx: &App) -> Vec<KeyBinding> {
+    // BOLT: always drop bindings of features removed from Bolt.
+    let bindings = bindings
+        .into_iter()
+        .filter(|binding| !is_bolt_removed_action(binding.action().name()));
     if !DisableAiSettings::get_global(cx).disable_ai {
-        return bindings;
+        return bindings.collect();
     }
     bindings
-        .into_iter()
         .filter(|binding| !is_ai_keybinding(binding))
         .collect()
+}
+
+// BOLT: features removed from Bolt (debugger, collab, remote development, REPL). Their code stays compiled for cheap
+// upstream merges; only the entry points are hidden.
+const BOLT_REMOVED_NAMESPACES: &[&str] =
+    &["debugger", "debug_panel", "collab", "collab_panel", "repl"];
+
+const BOLT_REMOVED_ACTIONS: &[&str] = &[
+    "projects::OpenRemote",
+    "projects::OpenDevContainer",
+    "projects::OpenWsl",
+    "projects::OpenFolderInWsl",
+    "editor::ToggleBreakpoint",
+    "editor::EnableBreakpoint",
+    "editor::DisableBreakpoint",
+    "editor::EditLogBreakpoint",
+];
+
+fn is_bolt_removed_action(name: &str) -> bool {
+    let namespace = name.split("::").next().unwrap_or_default();
+    BOLT_REMOVED_NAMESPACES.contains(&namespace) || BOLT_REMOVED_ACTIONS.contains(&name)
+}
+
+fn hide_bolt_removed_actions(cx: &mut App) {
+    use std::any::TypeId;
+    command_palette_hooks::CommandPaletteFilter::update_global(cx, |filter, _| {
+        for namespace in BOLT_REMOVED_NAMESPACES {
+            filter.hide_namespace(namespace);
+        }
+        filter.hide_action_types(&[
+            TypeId::of::<zed_actions::OpenRemote>(),
+            TypeId::of::<zed_actions::OpenDevContainer>(),
+            TypeId::of::<zed_actions::wsl_actions::OpenWsl>(),
+            TypeId::of::<zed_actions::wsl_actions::OpenFolderInWsl>(),
+            TypeId::of::<editor::actions::ToggleBreakpoint>(),
+            TypeId::of::<editor::actions::EnableBreakpoint>(),
+            TypeId::of::<editor::actions::DisableBreakpoint>(),
+            TypeId::of::<editor::actions::EditLogBreakpoint>(),
+        ]);
+    });
 }
 
 /// Populates a freshly opened window according to the `on_new_window` setting.
