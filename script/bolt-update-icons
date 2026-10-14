@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# BOLT: refresh the bundled Material Icon Theme from github.com/zed-extensions/material-icon-theme.
+# Icons are embedded in the binary and rendered in color (see `Icon::from_path` in crates/ui).
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+target="$repo_root/assets/icons/bundled_icon_themes/material_icon_theme"
+checkout="$(mktemp -d)"
+trap 'rm -rf "$checkout"' EXIT
+
+git clone --quiet --depth 1 https://github.com/zed-extensions/material-icon-theme.git "$checkout"
+
+rm -rf "$target"
+mkdir -p "$target"
+cp "$checkout"/icons/*.svg "$target/"
+cp "$checkout/LICENSE" "$target/LICENSE"
+# Icons sit next to the JSON, so drop the extension's `./icons/` prefix.
+sed 's#"\./icons/#"#g' "$checkout/icon_themes/material-icon-theme.json" > "$target/material-icon-theme.json"
+
+version="$(sed -n 's/^version = "\(.*\)"/\1/p' "$checkout/extension.toml")"
+commit="$(git -C "$checkout" rev-parse --short HEAD)"
+echo "$version ($commit)" > "$target/VERSION"
+echo "Material Icon Theme $version ($commit): $(ls "$target"/*.svg | wc -l | tr -d ' ') icons"

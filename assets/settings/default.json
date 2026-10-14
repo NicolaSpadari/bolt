@@ -6,12 +6,13 @@
   // - "system": Use the theme that corresponds to the system's appearance
   // - "light": Use the theme indicated by the "light" field
   // - "dark": Use the theme indicated by the "dark" field
+  // BOLT: default theme and bundled icon theme.
   "theme": {
-    "mode": "system",
+    "mode": "dark",
     "light": "One Light",
-    "dark": "One Dark",
+    "dark": "One Dark Pro Cursor",
   },
-  "icon_theme": "Zed (Default)",
+  "icon_theme": "Material Icon Theme",
   // The name of a base set of key bindings to use.
   // This setting can take the following values:
   //

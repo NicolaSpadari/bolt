@@ -423,6 +423,10 @@ fn icon_keys_by_association(
 /// The name of the default icon theme.
 pub const DEFAULT_ICON_THEME_NAME: &str = "Zed (Default)";
 
+// BOLT: embedded icon themes; `ui::Icon::from_path` renders icons under this dir in color.
+/// The asset directory holding the icon themes bundled with the binary.
+pub const BUNDLED_ICON_THEMES_DIR: &str = "icons/bundled_icon_themes/";
+
 static DEFAULT_ICON_THEME: LazyLock<Arc<IconTheme>> = LazyLock::new(|| {
     Arc::new(IconTheme {
         id: "zed".into(),

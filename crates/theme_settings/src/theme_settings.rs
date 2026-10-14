@@ -77,6 +77,8 @@ pub fn init(themes_to_load: LoadThemes, cx: &mut App) {
     if load_user_themes {
         let registry = ThemeRegistry::global(cx);
         load_bundled_themes(&registry);
+        // BOLT: icon themes shipped inside the binary (e.g. Material Icon Theme).
+        load_bundled_icon_themes(&registry);
     }
 
     let theme = configured_theme(cx);
@@ -237,6 +239,37 @@ pub fn load_bundled_themes(registry: &ThemeRegistry) {
 
         let refined = refine_theme_family(theme_family);
         registry.insert_theme_families([refined]);
+    }
+}
+
+// BOLT: bundled icon themes live in `assets/icons/bundled_icon_themes/<name>/<name>.json`, with their SVGs next to the
+// JSON. Icon paths resolve to embedded asset paths, which `ui::Icon::from_path` renders in color.
+/// Loads the icon themes bundled with the Bolt binary into the registry.
+pub fn load_bundled_icon_themes(registry: &ThemeRegistry) {
+    let icon_theme_paths = registry
+        .assets()
+        .list(theme::BUNDLED_ICON_THEMES_DIR)
+        .expect("failed to list icon theme assets")
+        .into_iter()
+        .filter(|path| path.ends_with(".json"));
+
+    for path in icon_theme_paths {
+        let Some(bytes) = registry.assets().load(&path).log_err().flatten() else {
+            continue;
+        };
+        let Some(icon_theme_family) = theme::deserialize_icon_theme(&bytes)
+            .with_context(|| format!("failed to parse icon theme at path \"{path}\""))
+            .log_err()
+        else {
+            continue;
+        };
+        let path: &str = &path;
+        let Some(icons_root_dir) = std::path::Path::new(path).parent() else {
+            continue;
+        };
+        registry
+            .load_icon_theme(icon_theme_family, icons_root_dir)
+            .log_err();
     }
 }
 
