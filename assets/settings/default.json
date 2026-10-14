@@ -623,7 +623,7 @@
     // Whether to show user picture in the titlebar.
     "show_user_picture": true,
     // Whether to show the user menu in the titlebar.
-    "show_user_menu": false,  // BOLT: off
+    "show_user_menu": true,
     // Whether to show the sign in button in the titlebar.
     "show_sign_in": false,  // BOLT: off
     // Whether to show the menus in the titlebar.

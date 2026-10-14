@@ -315,8 +315,8 @@ impl Render for TitleBar {
                 .h_full()
                 .gap_0p5()
                 .map(|title_bar| {
-                    // BOLT: project name and branch are rendered in the status bar.
-                    let mut render_project_items = false;
+                    // BOLT: project name stays here too; the branch lives in the status bar.
+                    let mut render_project_items = title_bar_settings.show_project_items;
                     title_bar
                         .when_some(
                             self.application_menu.clone().filter(|_| !show_menus),
@@ -340,7 +340,8 @@ impl Render for TitleBar {
                                         .child(self.render_project_name(project_name, window, cx))
                                 })
                                 .when_some(
-                                    repository.filter(|_| is_git_enabled),
+                                    // BOLT: branch only in the status bar.
+                                    repository.filter(|_| is_git_enabled && false),
                                     |title_bar, repository| {
                                         title_bar.children(self.render_worktree_and_branch(
                                             repository,
@@ -870,7 +871,8 @@ impl TitleBar {
                         )
                     })
                     .selected_style(ButtonStyle::Tinted(TintColor::Accent))
-                    .when(!is_project_selected, |s| s.color(Color::Muted)),
+                    // BOLT: same muted color as the branch.
+                    .color(Color::Muted),
                 move |_window, cx| {
                     Tooltip::for_action("Recent Projects", &zed_actions::OpenRecent::default(), cx)
                 },
@@ -882,7 +884,7 @@ impl TitleBar {
     fn render_recent_projects_popover(
         &self,
         display_name: String,
-        is_project_selected: bool,
+        _is_project_selected: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let workspace = self.workspace.clone();
@@ -922,7 +924,8 @@ impl TitleBar {
                         )
                     })
                     .selected_style(ButtonStyle::Tinted(TintColor::Accent))
-                    .when(!is_project_selected, |s| s.color(Color::Muted)),
+                    // BOLT: same muted color as the branch.
+                    .color(Color::Muted),
                 move |_window, cx| {
                     Tooltip::for_action("Recent Projects", &zed_actions::OpenRecent::default(), cx)
                 },
