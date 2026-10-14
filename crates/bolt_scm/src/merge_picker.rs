@@ -1,6 +1,6 @@
 //! BOLT: branch pickers of the source control panel.
-//! - "Merge Branch…" runs the user's `branch:merge` shell alias (`git merge --no-commit --no-ff <branch>`) into the
-//!   current branch, leaving the result uncommitted for review.
+//! - "Merge Branch…" runs `git merge --no-commit --no-ff <branch>` (the command behind the user's `branch:merge` alias)
+//!   into the current branch, leaving the result uncommitted for review.
 //! - "Create Branch From…" picks a base branch, then asks for the new branch name (`git switch -c <name> <base>`).
 
 use std::sync::Arc;
@@ -240,17 +240,9 @@ pub(crate) fn merge_no_commit(
         .as_ref()
         .map(|branch| branch.name().to_string())
         .unwrap_or_else(|| "HEAD".to_string());
-    // The user's own alias, through their login shell; plain git when the alias is not defined.
     let output = cx.background_spawn(async move {
-        util::command::new_std_command("zsh")
-            .args([
-                "-i",
-                "-c",
-                "if alias branch:merge >/dev/null 2>&1; then branch:merge \"$1\"; else git merge --no-commit --no-ff \"$1\"; fi",
-                "zsh",
-                &branch,
-            ])
-            .stdin(std::process::Stdio::null())
+        util::command::new_std_command("git")
+            .args(["merge", "--no-commit", "--no-ff", &branch])
             .current_dir(work_directory.as_ref())
             .output()
             .map(|output| (branch, output))
