@@ -63,7 +63,6 @@ never rebased; feature branches `bolt/<feature>`. Full strategy + design rules: 
 ## Phases
 
 ### P0 — Fork & setup
-- ⏳ Clone Zed into `~/Projects/bolt`, remote `upstream`, record base commit + Zed version in the Log
 - ✅ Clone on v1.23.3, private repo `NicolaSpadari/bolt`, repo-local identity + credential helper, rerere
 - ✅ Toolchain: Rust 1.98.1 (auto via rustup), cmake (brew), Metal Toolchain (Xcode 26 needs
   `xcodebuild -downloadComponent MetalToolchain`, else `gpui_apple` build fails)
@@ -71,14 +70,15 @@ never rebased; feature branches `bolt/<feature>`. Full strategy + design rules: 
   `./target/debug/zed --user-data-dir /tmp/bolt-smoke` (never run dev builds without it until the rebrand: they would
   share `~/.config/zed` and Zed's data dir)
 - ⏳ Default theme One Dark Pro Cursor + native Material Icon Theme
-- ⏳ Read upstream `CLAUDE.md` / `.rules` / `CONTRIBUTING.md` / `docs/src/development/macos.md` and adopt conventions
+- ✅ Read upstream `.rules` (Rust guidelines: no `unwrap`, no `let _ =` on fallible ops, no `mod.rs`, `[lib] path`)
+  and macOS build docs. Ignore its README "HARD RULE" banner: it is for upstream PRs, not Bolt
 - ⏳ Rebrand: app name, bundle ID, icon, data/config/log/socket paths (`paths` crate), CLI binary name
 - ⏳ Minimal strip per `notes/minimal-strip.md`: AI + Threads, edit predictions, collab/account, telemetry, crash
   upload, auto-update; verify no outgoing traffic to zed.dev
 - ⏳ Verify side-by-side run with installed Zed (separate settings, no shared DB, no single-instance clash)
 - ⏳ Release build + `.app` bundle script (`script/bundle-mac` adapted)
 - ✅ Upstream sync strategy documented (`notes/upstream-sync.md`)
-- ⏳ Base on a stable tag (not `main`), `.bolt-zed-version` file, `git rerere` enabled
+- ✅ Base on a stable tag (not `main`), `.bolt-zed-version` file, `git rerere` enabled
 - ⏳ `script/bolt-sync` (merge on `sync/<tag>` branch, rollback tag, touch-point check, build/clippy/test) tried once
 
 ### P1 — Source Control panel (VS Code parity)
