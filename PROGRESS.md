@@ -171,6 +171,8 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/title_bar/src/title_bar.rs` (2) | project name back in title bar (branch only in status bar), project name `Color::Muted` | user request |
 | `assets/settings/default.json` (2) | `title_bar.show_user_menu: true` again (no account items without sign-in) | user request |
 | `assets/settings/initial_user_settings.json` | template emptied (no theme/font overrides) | Zed's template forced One Dark when Bolt first wrote the user settings file (e.g. "Hide Button") |
+| `assets/settings/default.json` (user prefs) | user's Zed settings imported as defaults (marked `BOLT: user preference`): fonts (Google Sans Mono 14/450, UI 15), hard tabs, line length 150, VSCode base keymap, autosave on focus change, quit on last window closed, terminal (font 13, bar cursor blinking, env vars), git panel (group by staging, file icons), blame without avatar, file types, vtsls `updateImportsOnFileMove: never` | user request |
+| `assets/keymaps/default-macos.json` (user prefs) | block at the end: `cmd-ò` → terminal panel, `cmd-k` → toggle comments | user request |
 | `crates/title_bar/src/bolt_project_status.rs` (2) | folder icon before the footer project name; repo button (GitHub/GitLab/Bitbucket icon) opening the `origin` web page, hidden without a remote | user request |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
@@ -198,3 +200,4 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: sidebar search v1 (P2); title bar tweaks (user menu back, project name in title + status bar).
 - 2026-10-14: footer repo button + folder icon; search live refresh; fixed theme reset caused by Zed's initial
   user settings template.
+- 2026-10-14: user's Zed settings + keybindings imported as Bolt defaults (AI/collab/theme/dock-right ones skipped).

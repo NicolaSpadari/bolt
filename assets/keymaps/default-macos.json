@@ -1770,4 +1770,17 @@
       "shift-tab": "skill_creator::FocusPreviousField",
     },
   },
+  // BOLT: user preferences.
+  {
+    "context": "Workspace",
+    "bindings": {
+      "cmd-ò": "terminal_panel::Toggle",
+    },
+  },
+  {
+    "context": "Editor",
+    "bindings": {
+      "cmd-k": ["editor::ToggleComments", { "advance_downwards": false }],
+    },
+  },
 ]

@@ -25,23 +25,23 @@
   // 7. "Emacs"
   // 8. "Cursor"
   // 9. "None"
-  "base_keymap": "Zed",
+  "base_keymap": "VSCode",  // BOLT: user preference
   // The name of a font to use for rendering text in the editor
   // ".ZedMono" currently aliases to Lilex
   // but this may change in the future.
-  "buffer_font_family": ".ZedMono",
+  "buffer_font_family": "Google Sans Mono",  // BOLT: user preference
   // Set the buffer text's font fallbacks, this will be merged with
   // the platform's default fallbacks.
-  "buffer_font_fallbacks": null,
+  "buffer_font_fallbacks": ["Google Sans Mono Normale", "Google Sans Mono Regular", "Hasklig", "monospace"],  // BOLT: user preference
   // The OpenType features to enable for text in the editor.
   "buffer_font_features": {
     // Disable ligatures:
     // "calt": false
   },
   // The default font size for text in the editor
-  "buffer_font_size": 15,
+  "buffer_font_size": 14.0,  // BOLT: user preference
   // The weight of the editor font in standard CSS units from 100 to 900.
-  "buffer_font_weight": 400,
+  "buffer_font_weight": 450.0,  // BOLT: user preference
   // Set the buffer's line height.
   // May take 3 values:
   //  1. Use a line height that's comfortable for reading (1.618)
@@ -69,7 +69,7 @@
   // The weight of the UI font in standard CSS units from 100 to 900.
   "ui_font_weight": 400,
   // The default font size for text in the UI
-  "ui_font_size": 16,
+  "ui_font_size": 15.0,  // BOLT: user preference
   // The font family for agent responses in the agent panel. Falls back to the UI font family if unset.
   "agent_ui_font_family": null,
   // The default font size for agent responses in the agent panel. Falls back to the UI font size if unset.
@@ -212,7 +212,7 @@
   //         "when_closing_with_no_tabs": "close_window",
   //  3. Never close the window
   //         "when_closing_with_no_tabs": "keep_window_open",
-  "when_closing_with_no_tabs": "platform_default",
+  "when_closing_with_no_tabs": "keep_window_open",  // BOLT: user preference
   // What to show when opening a new window.
   // May take 2 values:
   //  1. Show an empty untitled buffer
@@ -226,7 +226,7 @@
   //         "on_last_window_closed": "platform_default"
   //  2. Always quit the application
   //         "on_last_window_closed": "quit_app",
-  "on_last_window_closed": "platform_default",
+  "on_last_window_closed": "quit_app",  // BOLT: user preference
   // The text rendering mode to use.
   // May take 3 values:
   //  1. Use platform default behavior:
@@ -1089,7 +1089,7 @@
     // Whether to show file icons in the git panel.
     //
     // Default: false
-    "file_icons": false,
+    "file_icons": true,  // BOLT: user preference
     // What to show for directories in the git panel.
     //
     // 1. A folder icon:
@@ -1112,7 +1112,7 @@
     // How to group entries in the git panel.
     //
     // Default: status
-    "group_by": "status",
+    "group_by": "staging",  // BOLT: user preference
     // Whether to collapse untracked files in the diff panel.
     //
     // Default: false
@@ -1454,7 +1454,7 @@
   //     "autosave": "on_focus_change",
   // 4. Save when idle for a certain amount of time:
   //     "autosave": { "after_delay": {"milliseconds": 500} },
-  "autosave": "off",
+  "autosave": "on_focus_change",  // BOLT: user preference
   // Maximum number of tabs per pane. Unset for unlimited.
   "max_tabs": null,
   // Settings related to the editor's tab bar.
@@ -1667,10 +1667,10 @@
   "soft_wrap_indent": "same",
   // The column at which to soft-wrap lines, for buffers where soft-wrap
   // is enabled.
-  "preferred_line_length": 80,
+  "preferred_line_length": 150,  // BOLT: user preference
   // Whether to indent lines using tab characters, as opposed to multiple
   // spaces.
-  "hard_tabs": false,
+  "hard_tabs": true,  // BOLT: user preference
   // How many columns a tab should occupy.
   "tab_size": 4,
   // Number of lines to search for modelines at the beginning and end of files.
@@ -1836,7 +1836,7 @@
       "min_column": 0,
     },
     "blame": {
-      "show_avatar": true,
+      "show_avatar": false,  // BOLT: user preference
     },
     // Control which information is shown in the branch picker.
     "branch_picker": {
@@ -2075,7 +2075,7 @@
     //         "blinking": "terminal_controlled",
     //  3. Always blink the cursor, ignoring the terminal mode
     //         "blinking": "on",
-    "blinking": "terminal_controlled",
+    "blinking": "on",  // BOLT: user preference
     // Default cursor shape for the terminal.
     //  1. A block that surrounds the following character
     //     "block"
@@ -2087,7 +2087,7 @@
     //     "hollow"
     //
     // Default: "block"
-    "cursor_shape": "block",
+    "cursor_shape": "bar",  // BOLT: user preference
     // Set whether Alternate Scroll mode (code: ?1007) is active by default.
     // Alternate Scroll mode converts mouse scroll events into up / down key
     // presses when in the alternate screen (e.g. when running applications
@@ -2123,6 +2123,10 @@
     // environment. Use `:` to separate multiple values.
     "env": {
       // "KEY": "value1:value2"
+      // BOLT: user preference (terminal integrations).
+      "Q_NEW_SESSION": "\"1\"",
+      "FIG_NEW_SESSION": "\"1\"",
+      "CW_NEW_SESSION": "\"1\"",
     },
     // Set the terminal's line height.
     // May take 3 values:
@@ -2180,14 +2184,14 @@
     },
     // Set the terminal's font size. If this option is not included,
     // the terminal will default to matching the buffer's font size.
-    // "font_size": 15,
+    "font_size": 13.0,  // BOLT: user preference
     // Set the terminal's font family. If this option is not included,
     // the terminal will default to matching the buffer's font family.
-    // "font_family": ".ZedMono",
+    "font_family": "Google Sans Mono",  // BOLT: user preference
     // Set the terminal's font fallbacks. If this option is not included,
     // the terminal will default to matching the buffer's font fallbacks.
     // This will be merged with the platform's default font fallbacks
-    // "font_fallbacks": ["FiraCode Nerd Fonts"],
+    "font_fallbacks": ["hack"],  // BOLT: user preference
     // The weight of the editor font in standard CSS units from 100 to 900.
     "font_weight": 400,
     // Sets the maximum number of lines in the terminal's scrollback buffer.
@@ -2302,6 +2306,13 @@
   // }
   //
   "file_types": {
+    // BOLT: user preferences.
+    "json": ["*.json"],
+    "shellscript": ["*.env*"],
+    "javascript": ["*.js.*"],
+    "xml": ["*.plist", "*.svg"],
+    "toml": ["*.toml"],
+    "jsonc": ["*.json*"],
     "JSONC": [
       "**/.zed/*.json",
       "**/.vscode/**/*.json",
@@ -2725,6 +2736,14 @@
   },
   // LSP Specific settings.
   "lsp": {
+    // BOLT: user preference.
+    "vtsls": {
+      "settings": {
+        "typescript": { "updateImportsOnFileMove": { "enabled": "never" } },
+        "javascript": { "updateImportsOnFileMove": { "enabled": "never" } },
+      },
+      "enable_lsp_tasks": true,
+    },
     // Specify the LSP name as a key here.
     // "rust-analyzer": {
     //     // A special flag for rust-analyzer integration, to use server-provided tasks

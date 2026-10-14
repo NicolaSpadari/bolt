@@ -82,6 +82,8 @@ impl TitleBar {
 
         h_flex()
             .gap_0p5()
+            // Same distance from the window edge as the status bar's right-side buttons.
+            .pl_1()
             .when(title_bar_settings.show_project_items, |this| {
                 this.child(
                     h_flex()
