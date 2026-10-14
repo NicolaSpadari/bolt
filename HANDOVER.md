@@ -35,7 +35,6 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - Dev builds identify as **Stable** (`crates/zed/RELEASE_CHANNEL` = stable): they share Zed's single-instance port
   (44438), log file `~/Library/Logs/Zed/Zed.log` and keychain service name → fix in the rebrand (do it next).
 - `cargo test` not run yet (upstream tests may assume Zed defaults: theme, docks, status bar items).
-- Activity bar hides when the left dock is zoomed? No: it stays (rendered outside `render_dock`).
 
 ### Next Steps (wait for the user to pick)
 1. User check of activity bar + status bar project/branch.
