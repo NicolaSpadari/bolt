@@ -44,7 +44,8 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 
 ### Next Steps (wait for the user to pick)
 1. User feedback on the release build (app icon, Iconify, colors).
-2. Backlog: merge panel (VS Code merge conflict editor), `script/bolt-sync` (upstream sync, P0). Cursor-style
+2. Backlog (PROGRESS): merge panel, search panel UI restyle (Zed-native, UI only), lighter builds via Cargo
+   features (later), `script/bolt-sync` (upstream sync, P0). Cursor-style
    autocomplete: dropped (Cursor Tab is server-side); Zed's local next-edit prediction (Zeta2/Sweep via Ollama) is
    the option if wanted later.
 3. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).

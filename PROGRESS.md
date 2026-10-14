@@ -143,10 +143,20 @@ file is upstream's hottest (46 commits / 3 months).
 - ⏳ Diagnostics (errors/warnings) of nested files are not yet combined on a collapsed parent.
 
 ### Backlog (on request)
-- ⏳ Cursor-style autocomplete (user request 2026-10-14; details to be defined with the user — note Bolt has AI and
-  edit predictions switched off, so this needs a decision on provider/approach first).
+- ⛔ Cursor-style autocomplete: dropped (2026-10-14). Cursor Tab runs on Cursor's servers (`aiserver.v1.StreamCpp`,
+  no local model in the app). If wanted later: Zed's local next-edit prediction (`zeta2` / `sweep` via Ollama).
 - ⏳ Merge panel: VS Code-style merge conflict editor (incoming / current / result, accept current / incoming / both),
   tied to the Merge Changes section of the source control panel (user request 2026-10-14; details later).
+- ⏳ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
+  (toolbar at tab height, Zed list rows, outlined buttons, Zed inputs). UI only: the logic stays as is (user request
+  2026-10-14).
+- ⏳ Lighter builds (later, user request 2026-10-14): exclude switched-off subsystems from the build with Cargo
+  features on the `zed` crate only (`repl`, `debugger` first — attached only to `zed`; then `ai`: `agent_ui`, `agent`,
+  `language_models`, `copilot`, edit prediction; then `calls`: `call`/LiveKit, also used by `title_bar`,
+  `collab_ui`). Keep `language_model` (used everywhere). Measured 2026-10-14: these subsystems own ~104 of 1056
+  crates (AI 71 incl. the AWS SDK; calls 13; REPL 11; debugger 6; remote 2) → expect -10/20% on clean builds, no
+  change on incremental ones. Pair with `script/bolt-sync`: on each Zed update, `cargo tree -i` audit listing new
+  crates that depend on an excluded subsystem and new deps of `zed`, so only what Bolt uses gets aligned.
 - Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
