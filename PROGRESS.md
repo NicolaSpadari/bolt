@@ -91,7 +91,9 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ✅ VS Code-style activity bar: left dock panel icons in a vertical bar on the far left (bigger icons); project name +
   branch moved from the title bar to the status bar (bottom left). Build + run OK, user check pending
 - 🚧 Verify side-by-side run with installed Zed (dirs/port/log verified separate; user to try both open together)
-- ⏳ Release build + `.app` bundle script (`script/bundle-mac` adapted)
+- ✅ Release `.app`: `script/bolt-bundle-mac [--clean] [--install]` → `target/release/Bolt.app` (release + thin LTO,
+  Bolt icon `AppIcon.icns`, Info.plist `com.spadari.bolt` + Zed's plist fragments, ad-hoc signature). Clean release
+  build ≈ 30–40 min; `--install` copies to /Applications (only on user request).
 - ✅ Upstream sync strategy documented (`notes/upstream-sync.md`)
 - ✅ Base on a stable tag (not `main`), `.bolt-zed-version` file, `git rerere` enabled
 - ⏳ `script/bolt-sync` (merge on `sync/<tag>` branch, rollback tag, touch-point check, build/clippy/test) tried once
@@ -208,3 +210,4 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   user settings template.
 - 2026-10-14: user's Zed settings + keybindings imported as Bolt defaults (AI/collab/theme/dock-right ones skipped).
 - 2026-10-14: source control panel v1 (P1) + Merge Branch; `git_panel.bolt_panel` switch.
+- 2026-10-14: first clean release build + Bolt.app (fixed release-only error: WSL actions exist only in debug builds).

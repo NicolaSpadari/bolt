@@ -32,6 +32,8 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp target/release/bolt "$app/Contents/MacOS/bolt"
 cp target/release/cli "$app/Contents/MacOS/cli"
+# Drop local symbols, as Zed does for its releases (much smaller bundle).
+strip -x "$app/Contents/MacOS/bolt" "$app/Contents/MacOS/cli"
 cp crates/zed/resources/Document.icns "$app/Contents/Resources/Document.icns"
 
 # App icon from the generated PNGs (see script/bolt-generate-icons.swift).
