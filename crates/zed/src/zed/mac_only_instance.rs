@@ -14,6 +14,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_millis(10);
 const RECEIVE_TIMEOUT: Duration = Duration::from_millis(35);
 const SEND_TIMEOUT: Duration = Duration::from_millis(20);
 const USER_BLOCK: u16 = 100;
+// BOLT: shifts every channel's port away from Zed's (43737..44538 for uid 501).
+const BOLT_INSTANCE_PORT_OFFSET: u16 = 3000;
 
 fn address() -> SocketAddr {
     // These port numbers are offset by the user ID to avoid conflicts between
@@ -34,6 +36,8 @@ fn address() -> SocketAddr {
         ReleaseChannel::Stable => 43737 + (2 * USER_BLOCK),
         ReleaseChannel::Nightly => 43737 + (3 * USER_BLOCK),
     };
+    // BOLT: own port range so Bolt and an installed Zed never see each other as the running instance.
+    let port = port + BOLT_INSTANCE_PORT_OFFSET;
     let mut user_port = port;
     let mut sys = System::new_all();
     sys.refresh_all();

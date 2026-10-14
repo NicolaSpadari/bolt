@@ -6,7 +6,7 @@ version = "1.23.3"
 publish.workspace = true
 license = "GPL-3.0-or-later"
 authors = ["Zed Team <hi@zed.dev>"]
-default-run = "zed"
+default-run = "bolt" # BOLT
 
 [lints]
 workspace = true
@@ -54,7 +54,8 @@ visual-tests = [
 ]
 
 [[bin]]
-name = "zed"
+# BOLT: binary name must match paths::APP_NAME.
+name = "bolt"
 path = "src/main.rs"
 
 [[bin]]
@@ -282,11 +283,11 @@ repl = { workspace = true, features = ["test-support"] }
 
 [package.metadata.bundle-dev]
 icon = ["resources/app-icon-dev@2x.png", "resources/app-icon-dev.png"]
-identifier = "dev.zed.Zed-Dev"
-name = "Zed Dev"
+identifier = "com.spadari.bolt.dev"  # BOLT
+name = "Bolt Dev"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["bolt"]
 
 [package.metadata.bundle-nightly]
 icon = ["resources/app-icon-nightly@2x.png", "resources/app-icon-nightly.png"]
@@ -306,11 +307,11 @@ osx_url_schemes = ["zed"]
 
 [package.metadata.bundle-stable]
 icon = ["resources/app-icon@2x.png", "resources/app-icon.png"]
-identifier = "dev.zed.Zed"
-name = "Zed"
+identifier = "com.spadari.bolt"  # BOLT
+name = "Bolt"
 osx_minimum_system_version = "10.15.7"
 osx_info_plist_exts = ["resources/info/*"]
-osx_url_schemes = ["zed"]
+osx_url_schemes = ["bolt"]
 
 [package.metadata.cargo-shear]
 ignored = ["profiling", "tracing"]

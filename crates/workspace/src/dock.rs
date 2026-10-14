@@ -951,11 +951,26 @@ impl Dock {
         cx: &mut Context<Self>,
     ) {
         if Some(panel_ix) != self.active_panel_index {
+            // BOLT: the left sidebar has a single width shared by all its panels.
+            let shared_size = (self.position == DockPosition::Left)
+                .then(|| self.active_panel_entry())
+                .flatten()
+                .map(|entry| {
+                    entry
+                        .size_state
+                        .size
+                        .unwrap_or_else(|| entry.panel.default_size(window, cx))
+                });
             if let Some(active_panel) = self.active_panel_entry() {
                 active_panel.panel.set_active(false, window, cx);
             }
 
             self.active_panel_index = Some(panel_ix);
+            if let Some(size) = shared_size
+                && let Some(entry) = self.panel_entries.get_mut(panel_ix)
+            {
+                entry.size_state.size = Some(size);
+            }
             if let Some(active_panel) = self.active_panel_entry() {
                 active_panel.panel.set_active(true, window, cx);
             }
@@ -1159,9 +1174,11 @@ impl Dock {
     }
 
     fn should_resize_all_panels(&self, cx: &App) -> bool {
-        WorkspaceSettings::get_global(cx)
-            .resize_all_panels_in_dock
-            .contains(&self.position)
+        // BOLT: the left sidebar always resizes as one.
+        self.position == DockPosition::Left
+            || WorkspaceSettings::get_global(cx)
+                .resize_all_panels_in_dock
+                .contains(&self.position)
     }
 
     fn resize_all_panels(

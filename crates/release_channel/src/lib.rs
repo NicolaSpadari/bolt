@@ -204,11 +204,12 @@ impl ReleaseChannel {
 
     /// Returns the display name for this [`ReleaseChannel`].
     pub fn display_name(&self) -> &'static str {
+        // BOLT: app name.
         match self {
-            ReleaseChannel::Dev => "Zed Dev",
-            ReleaseChannel::Nightly => "Zed Nightly",
-            ReleaseChannel::Preview => "Zed Preview",
-            ReleaseChannel::Stable => "Zed",
+            ReleaseChannel::Dev => "Bolt Dev",
+            ReleaseChannel::Nightly => "Bolt Nightly",
+            ReleaseChannel::Preview => "Bolt Preview",
+            ReleaseChannel::Stable => "Bolt",
         }
     }
 
@@ -226,11 +227,12 @@ impl ReleaseChannel {
     /// and WM_CLASS on X11.
     /// This also has to match the bundle identifier for Zed on macOS.
     pub fn app_id(&self) -> &'static str {
+        // BOLT: bundle identifiers.
         match self {
-            ReleaseChannel::Dev => "dev.zed.Zed-Dev",
-            ReleaseChannel::Nightly => "dev.zed.Zed-Nightly",
-            ReleaseChannel::Preview => "dev.zed.Zed-Preview",
-            ReleaseChannel::Stable => "dev.zed.Zed",
+            ReleaseChannel::Dev => "com.spadari.bolt.dev",
+            ReleaseChannel::Nightly => "com.spadari.bolt.nightly",
+            ReleaseChannel::Preview => "com.spadari.bolt.preview",
+            ReleaseChannel::Stable => "com.spadari.bolt",
         }
     }
 
