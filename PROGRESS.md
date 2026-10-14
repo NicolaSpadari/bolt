@@ -215,4 +215,4 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: user's Zed settings + keybindings imported as Bolt defaults (AI/collab/theme/dock-right ones skipped).
 - 2026-10-14: source control panel v1 (P1) + Merge Branch; `git_panel.bolt_panel` switch.
 - 2026-10-14: first clean release build + Bolt.app (fixed release-only error: WSL actions exist only in debug builds).
-- 2026-10-14: backlog += Cursor-style autocomplete, merge panel. Install to /Applications pending user go-ahead.
+- 2026-10-14: backlog += Cursor-style autocomplete, merge panel. Bolt.app moved to /Applications.
