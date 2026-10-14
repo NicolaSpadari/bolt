@@ -71,7 +71,8 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
   `./target/debug/zed --user-data-dir /tmp/bolt-smoke` (never run dev builds without it until the rebrand: they would
   share `~/.config/zed` and Zed's data dir)
 - ✅ Default theme One Dark Pro Cursor (dark mode) + native Material Icon Theme 1.3.2 in color (build + isolated run
-  OK, no theme/icon errors in log; visual check by the user pending)
+  OK, confirmed by the user)
+- ✅ Defaults: project, outline and git panels docked left (Zed 1.x puts them right); worktree name hidden in title bar
 - ✅ Read upstream `.rules` (Rust guidelines: no `unwrap`, no `let _ =` on fallible ops, no `mod.rs`, `[lib] path`)
   and macOS build docs. Ignore its README "HARD RULE" banner: it is for upstream PRs, not Bolt
 - ⏳ Rebrand: app name, bundle ID, icon, data/config/log/socket paths (`paths` crate), CLI binary name
@@ -122,7 +123,7 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
 Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new files) are not listed.
 | File | Change | Why |
 |---|---|---|
-| `assets/settings/default.json` | `theme` (mode dark, One Dark Pro Cursor), `icon_theme` (Material Icon Theme) | Bolt defaults |
+| `assets/settings/default.json` | `theme` (mode dark, One Dark Pro Cursor), `icon_theme` (Material Icon Theme); `dock: left` for project/outline/git panels; `title_bar.show_worktree_name: false` | Bolt defaults |
 | `crates/theme/src/icon_theme.rs` | `BUNDLED_ICON_THEMES_DIR` const | shared by loader and `Icon` |
 | `crates/theme_settings/src/theme_settings.rs` | `load_bundled_icon_themes()` + call in `init` | load icon themes from embedded assets |
 | `crates/ui/src/components/icon.rs` | `IconSource::EmbeddedImage` + routing in `from_path` + render arm | embedded SVG is a single-color mask; theme icons go through `img()` for color |

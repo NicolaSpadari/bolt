@@ -18,8 +18,9 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 
 ### Current State
 - Build: `cargo build` OK (dev). Isolated run: `./target/debug/zed --user-data-dir /tmp/bolt-smoke <path>`.
-- Theme/icons: build + run OK, no errors in log; **visual check not done by me** (no Screen Recording permission for the
-  terminal: `screencapture` returns only the wallpaper). Ask the user to confirm, or to grant the permission.
+- Theme/icons confirmed working by the user. Left-docked panels + hidden worktree name: build + run OK, user check pending
+  (no Screen Recording permission for the
+  terminal: `screencapture` returns only the wallpaper).
 - Upstream touch points so far: 4 files, listed in PROGRESS; all marked `// BOLT:`.
 
 ### Decisions Made
@@ -35,7 +36,7 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - `cargo test` not run yet (some upstream tests may assume default theme "One Dark" / icon theme "Zed (Default)").
 
 ### Next Steps (wait for the user to pick)
-1. User visual check of theme + icons.
+1. User check of left sidebar + hidden worktree name.
 2. Rebrand + isolation (name Bolt, `com.spadari.bolt`, dirs in PROGRESS, CLI name), then minimal strip.
 3. `script/bolt-sync` + release bundle; then P1 gap analysis (`notes/vscode-scm-parity.md`).
 
