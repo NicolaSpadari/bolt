@@ -140,7 +140,11 @@ file is upstream's hottest (46 commits / 3 months).
 - ⏳ Diagnostics (errors/warnings) of nested files are not yet combined on a collapsed parent.
 
 ### Backlog (on request)
-- Timeline / file history view, Outline in sidebar, … (add here when the user asks)
+- ⏳ Cursor-style autocomplete (user request 2026-10-14; details to be defined with the user — note Bolt has AI and
+  edit predictions switched off, so this needs a decision on provider/approach first).
+- ⏳ Merge panel: VS Code-style merge conflict editor (incoming / current / result, accept current / incoming / both),
+  tied to the Merge Changes section of the source control panel (user request 2026-10-14; details later).
+- Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
 Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new files) are not listed.
@@ -211,3 +215,4 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: user's Zed settings + keybindings imported as Bolt defaults (AI/collab/theme/dock-right ones skipped).
 - 2026-10-14: source control panel v1 (P1) + Merge Branch; `git_panel.bolt_panel` switch.
 - 2026-10-14: first clean release build + Bolt.app (fixed release-only error: WSL actions exist only in debug builds).
+- 2026-10-14: backlog += Cursor-style autocomplete, merge panel. Install to /Applications pending user go-ahead.
