@@ -389,6 +389,8 @@ struct PanelEntry {
 
 pub struct PanelButtons {
     dock: Entity<Dock>,
+    // BOLT: rendered as a VS Code-style activity bar.
+    vertical: bool,
     _settings_subscription: Subscription,
 }
 
@@ -1382,19 +1384,28 @@ impl PanelButtons {
         let settings_subscription = cx.observe_global::<SettingsStore>(|_, cx| cx.notify());
         Self {
             dock,
+            vertical: false,
             _settings_subscription: settings_subscription,
         }
+    }
+
+    // BOLT: vertical buttons with larger icons, for the activity bar.
+    pub fn vertical(mut self) -> Self {
+        self.vertical = true;
+        self
     }
 }
 
 impl Render for PanelButtons {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let vertical = self.vertical;
         let dock = self.dock.read(cx);
         let active_index = dock.active_panel_index;
         let is_open = dock.is_open;
         let dock_position = dock.position;
 
         let (menu_anchor, menu_attach) = match dock.position {
+            _ if vertical => (Anchor::TopLeft, Anchor::TopRight),
             DockPosition::Left => (Anchor::BottomLeft, Anchor::TopLeft),
             DockPosition::Bottom | DockPosition::Right => (Anchor::BottomRight, Anchor::TopRight),
         };
@@ -1534,7 +1545,12 @@ impl Render for PanelButtons {
                             // Include active state in element ID to invalidate the cached
                             // tooltip when panel state changes (e.g., via keyboard shortcut)
                             let button = IconButton::new((name, is_active_button as u64), icon)
-                                .icon_size(IconSize::Small)
+                                .icon_size(if vertical {
+                                    IconSize::Medium
+                                } else {
+                                    IconSize::Small
+                                })
+                                .when(vertical, |button| button.size(ButtonSize::Large))
                                 .toggle_state(is_active_button)
                                 .tab_index(0isize)
                                 .aria_label(icon_tooltip)
@@ -1567,6 +1583,10 @@ impl Render for PanelButtons {
             buttons.reverse();
         }
 
+        if vertical {
+            return v_flex().gap_1().children(buttons).into_any_element();
+        }
+
         let has_buttons = !buttons.is_empty();
 
         h_flex()
@@ -1581,6 +1601,7 @@ impl Render for PanelButtons {
             .when(has_buttons && dock.position == DockPosition::Left, |this| {
                 this.child(Divider::vertical().color(DividerColor::Border))
             })
+            .into_any_element()
     }
 }
 

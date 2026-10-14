@@ -1577,6 +1577,9 @@ struct DispatchingKeystrokes {
 /// A `Workspace` usually consists of 1 or more projects, a central pane group, 3 docks and a status bar.
 /// The `Workspace` owns everybody's state and serves as a default, "global context",
 /// that can be used to register a global action to be triggered from any place in the window.
+// BOLT: width of the activity bar left of the left dock.
+const BOLT_ACTIVITY_BAR_WIDTH: Pixels = px(40.);
+
 pub struct Workspace {
     weak_self: WeakEntity<Self>,
     workspace_actions: Vec<Box<dyn Fn(Div, &Workspace, &mut Window, &mut Context<Self>) -> Div>>,
@@ -1594,6 +1597,8 @@ pub struct Workspace {
     last_active_center_pane: Option<WeakEntity<Pane>>,
     last_active_view_id: Option<proto::ViewId>,
     status_bar: Entity<StatusBar>,
+    // BOLT: left dock buttons, shown as a VS Code-style activity bar.
+    activity_bar: Entity<PanelButtons>,
     pub(crate) modal_layer: Entity<ModalLayer>,
     toast_layer: Entity<ToastLayer>,
     titlebar_item: Option<AnyView>,
@@ -1971,7 +1976,8 @@ impl Workspace {
         let left_dock = Dock::new(DockPosition::Left, modal_layer.clone(), window, cx);
         let bottom_dock = Dock::new(DockPosition::Bottom, modal_layer.clone(), window, cx);
         let right_dock = Dock::new(DockPosition::Right, modal_layer.clone(), window, cx);
-        let left_dock_buttons = cx.new(|cx| PanelButtons::new(left_dock.clone(), cx));
+        // BOLT: left dock buttons live in the activity bar, not in the status bar.
+        let left_dock_buttons = cx.new(|cx| PanelButtons::new(left_dock.clone(), cx).vertical());
         let bottom_dock_buttons = cx.new(|cx| PanelButtons::new(bottom_dock.clone(), cx));
         let right_dock_buttons = cx.new(|cx| PanelButtons::new(right_dock.clone(), cx));
         let multi_workspace = window
@@ -1981,7 +1987,6 @@ impl Workspace {
         let status_bar = cx.new(|cx| {
             let mut status_bar =
                 StatusBar::new(&center_pane.clone(), multi_workspace.clone(), window, cx);
-            status_bar.add_left_item(left_dock_buttons, window, cx);
             status_bar.add_right_item(right_dock_buttons, window, cx);
             status_bar.add_right_item(bottom_dock_buttons, window, cx);
             status_bar
@@ -2099,6 +2104,7 @@ impl Workspace {
             last_active_center_pane: Some(center_pane.downgrade()),
             last_active_view_id: None,
             status_bar,
+            activity_bar: left_dock_buttons,
             modal_layer,
             toast_layer,
             titlebar_item: None,
@@ -8635,6 +8641,22 @@ impl Workspace {
             )
     }
 
+    // BOLT: VS Code-style activity bar on the far left, holding the left dock's panel buttons.
+    fn render_activity_bar(&self, cx: &App) -> impl IntoElement {
+        let colors = cx.theme().colors();
+        v_flex()
+            .id("bolt-activity-bar")
+            .h_full()
+            .w(BOLT_ACTIVITY_BAR_WIDTH)
+            .flex_none()
+            .items_center()
+            .pt_1()
+            .bg(colors.title_bar_background)
+            .border_r_1()
+            .border_color(colors.border)
+            .child(self.activity_bar.clone())
+    }
+
     fn render_dock(
         &self,
         position: DockPosition,
@@ -9733,7 +9755,8 @@ impl Render for Workspace {
                                                 DockPosition::Left => {
                                                     workspace.resize_left_dock(
                                                         e.event.position.x
-                                                            - workspace.bounds.left(),
+                                                            - workspace.bounds.left()
+                                                            - BOLT_ACTIVITY_BAR_WIDTH,
                                                         window,
                                                         cx,
                                                     );
@@ -9772,6 +9795,7 @@ impl Render for Workspace {
                                                 .flex_row()
                                                 .flex_1()
                                                 .overflow_hidden()
+                                                .child(self.render_activity_bar(cx))
                                                 .children(self.render_dock(
                                                     DockPosition::Left,
                                                     &self.left_dock,
@@ -9835,6 +9859,7 @@ impl Render for Workspace {
                                                         .flex()
                                                         .flex_row()
                                                         .flex_1()
+                                                        .child(self.render_activity_bar(cx))
                                                         .children(self.render_dock(
                                                             DockPosition::Left,
                                                             &self.left_dock,
@@ -9891,6 +9916,7 @@ impl Render for Workspace {
                                         .flex()
                                         .flex_row()
                                         .h_full()
+                                        .child(self.render_activity_bar(cx))
                                         .children(self.render_dock(
                                             DockPosition::Left,
                                             &self.left_dock,
@@ -9958,6 +9984,7 @@ impl Render for Workspace {
                                         .flex()
                                         .flex_row()
                                         .h_full()
+                                        .child(self.render_activity_bar(cx))
                                         .children(self.render_dock(
                                             DockPosition::Left,
                                             &self.left_dock,

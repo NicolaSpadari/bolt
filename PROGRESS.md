@@ -76,8 +76,13 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ✅ Read upstream `.rules` (Rust guidelines: no `unwrap`, no `let _ =` on fallible ops, no `mod.rs`, `[lib] path`)
   and macOS build docs. Ignore its README "HARD RULE" banner: it is for upstream PRs, not Bolt
 - ⏳ Rebrand: app name, bundle ID, icon, data/config/log/socket paths (`paths` crate), CLI binary name
-- ⏳ Minimal strip per `notes/minimal-strip.md`: AI + Threads, edit predictions, collab/account, telemetry, crash
-  upload, auto-update; verify no outgoing traffic to zed.dev
+- ✅ Minimal strip per `notes/minimal-strip.md` (map: `notes/minimal-strip-map.md`): AI + Threads, edit predictions,
+  collab/sign-in/user menu, telemetry, auto-update, debugger, remote dev, REPL, vim onboarding. Startup sign-in removed
+  (it reused the installed Zed's keychain credentials). Network check: after first-run extension installs, no outgoing
+  connections at startup. User confirmed it works.
+- ✅ Restricted Mode off by default (`trust_all_worktrees: true`; set `false` to get the prompt back)
+- ✅ VS Code-style activity bar: left dock panel icons in a vertical bar on the far left (bigger icons); project name +
+  branch moved from the title bar to the status bar (bottom left). Build + run OK, user check pending
 - ⏳ Verify side-by-side run with installed Zed (separate settings, no shared DB, no single-instance clash)
 - ⏳ Release build + `.app` bundle script (`script/bundle-mac` adapted)
 - ✅ Upstream sync strategy documented (`notes/upstream-sync.md`)
@@ -127,9 +132,20 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/theme/src/icon_theme.rs` | `BUNDLED_ICON_THEMES_DIR` const | shared by loader and `Icon` |
 | `crates/theme_settings/src/theme_settings.rs` | `load_bundled_icon_themes()` + call in `init` | load icon themes from embedded assets |
 | `crates/ui/src/components/icon.rs` | `IconSource::EmbeddedImage` + routing in `from_path` + render arm | embedded SVG is a single-color mask; theme icons go through `img()` for color |
+| `assets/settings/default.json` (minimal) | `disable_ai`, `agent.enabled/button`, `edit_predictions.provider: none`, `show_edit_predictions`, `collaboration_panel.button`, `title_bar.show_sign_in/show_user_menu`, `show_call_status_icon`, `telemetry.*`, `auto_update`, `debugger.button`, `gutter.breakpoints`, `jupyter.enabled` → off; `trust_all_worktrees: true` | Minimal Bolt; no Restricted Mode prompt |
+| `crates/zed/src/main.rs` | startup `authenticate` behind `BOLT_SIGN_IN_AT_STARTUP = false` | never reuse an installed Zed's keychain credentials |
+| `crates/zed/src/zed.rs` | no Collab/Debug panels; `BOLT_REMOVED_*` + `hide_bolt_removed_actions` (keymap + command palette) | debugger, collab, remote dev, REPL entry points |
+| `crates/zed/Cargo.toml` (+ `Cargo.lock`) | `command_palette_hooks` dep | palette filter |
+| `crates/zed/src/zed/app_menus.rs` | removed Collab/Debugger panels, Check for Updates, Open Remote, debugger Run items, release notes, telemetry log | menus |
+| `crates/onboarding/src/basics_page.rs` | AI, vim, telemetry sections behind `.when(false, …)` | onboarding |
+| `crates/settings_ui/src/page_data.rs` | `BOLT_HIDDEN_PAGES` filter (Debugger, Collaboration, AI) | settings UI |
+| `crates/recent_projects/src/recent_projects.rs` | "Open Remote Folder" button/menu hidden, `BOLT_SUGGEST_DEV_CONTAINERS = false` | remote dev |
+| `crates/workspace/src/dock.rs` | `PanelButtons::vertical()` (column, Medium icons, Large buttons, menu to the right) | activity bar |
+| `crates/workspace/src/workspace.rs` | `activity_bar` field, `render_activity_bar` before the left dock (4 layouts), left dock buttons out of status bar, drag resize minus `BOLT_ACTIVITY_BAR_WIDTH` | VS Code-style activity bar |
+| `crates/title_bar/src/title_bar.rs` | `mod bolt_project_status`, status item registration in `init`, project items hidden in title bar | project name + branch in status bar |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
-`script/bolt-update-icons`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
+`script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
 
 ## Log
 - 2026-10-13: project defined; decisions recorded; no clone yet, no code.
@@ -143,3 +159,6 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   Theme + icons committed on `main` (ec783f4db1). Gotchas: the terminal has no Screen Recording permission
   (`screencapture` shows only the wallpaper); dev builds still write logs to `~/Library/Logs/Zed/Zed.log` even with
   `--user-data-dir` (fixed by the rebrand).
+
+- 2026-10-14: minimal strip done; found that dev builds identify as the Stable channel (`crates/zed/RELEASE_CHANNEL`)
+  and share Zed's single-instance port 44438 and log file → fix in the rebrand. Activity bar + status bar project items.

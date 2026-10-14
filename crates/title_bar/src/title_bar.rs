@@ -1,4 +1,6 @@
 mod application_menu;
+// BOLT: project name and branch in the status bar.
+mod bolt_project_status;
 pub mod collab;
 mod onboarding_banner;
 mod plan_chip;
@@ -115,6 +117,8 @@ pub fn init(cx: &mut App) {
         };
         let multi_workspace = workspace.multi_workspace().cloned();
         let item = cx.new(|cx| TitleBar::new("title-bar", workspace, multi_workspace, window, cx));
+        // BOLT: project name and branch go to the status bar.
+        bolt_project_status::add_to_status_bar(workspace, &item, window, cx);
         workspace.set_titlebar_item(item.into(), window, cx);
 
         workspace.register_action(|_workspace, _: &UseClassicLayout, _window, cx| {
@@ -311,8 +315,8 @@ impl Render for TitleBar {
                 .h_full()
                 .gap_0p5()
                 .map(|title_bar| {
-                    let mut render_project_items = title_bar_settings.show_branch_name
-                        || title_bar_settings.show_project_items;
+                    // BOLT: project name and branch are rendered in the status bar.
+                    let mut render_project_items = false;
                     title_bar
                         .when_some(
                             self.application_menu.clone().filter(|_| !show_menus),
