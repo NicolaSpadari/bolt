@@ -143,8 +143,6 @@ file is upstream's hottest (46 commits / 3 months).
 - ⏳ Diagnostics (errors/warnings) of nested files are not yet combined on a collapsed parent.
 
 ### Backlog (on request)
-- ⛔ Cursor-style autocomplete: dropped (2026-10-14). Cursor Tab runs on Cursor's servers (`aiserver.v1.StreamCpp`,
-  no local model in the app). If wanted later: Zed's local next-edit prediction (`zeta2` / `sweep` via Ollama).
 - ⏳ Merge panel: VS Code-style merge conflict editor (incoming / current / result, accept current / incoming / both),
   tied to the Merge Changes section of the source control panel (user request 2026-10-14; details later).
 - ⏳ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
@@ -245,7 +243,7 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: user's Zed settings + keybindings imported as Bolt defaults (AI/collab/theme/dock-right ones skipped).
 - 2026-10-14: source control panel v1 (P1) + Merge Branch; `git_panel.bolt_panel` switch.
 - 2026-10-14: first clean release build + Bolt.app (fixed release-only error: WSL actions exist only in debug builds).
-- 2026-10-14: backlog += Cursor-style autocomplete, merge panel. Bolt.app moved to /Applications.
+- 2026-10-14: backlog += merge panel. Bolt.app moved to /Applications.
 - 2026-10-14: remaining P1 items dropped (user); `diagnostics.button` off by default.
 - 2026-10-14: `cargo test -p project_panel`: 136 pass, 3 fail (2 layout + `undo_create_dirty_file`). Not bugs: tests load
   `default.json`, all 3 pass with Zed's values for `ui_font_size`, panel `dock` and `autosave`.
