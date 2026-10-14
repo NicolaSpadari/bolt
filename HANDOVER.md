@@ -19,8 +19,8 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
   status bar + Restricted Mode off by default (eab5d96d6d).
 
 ### Current State
-- Build: `cargo build` OK (dev, 0 warnings). Isolated run: `./target/debug/zed --user-data-dir /tmp/bolt-smoke <path>`.
-- User confirmed: theme/icons, minimal strip. Pending user check: activity bar, project/branch in status bar.
+- Build: `cargo build` OK (dev, 0 warnings). Run: `./target/debug/bolt <path>` (own dirs since the rebrand).
+- User confirmed: theme/icons, minimal strip, activity bar + status bar. Pending: rebrand + shared sidebar width.
 - I can't see the screen (terminal lacks Screen Recording permission); verify with build + log + `lsof` + user.
 - Upstream touch points: listed in PROGRESS, all marked `BOLT:`.
 
@@ -32,14 +32,12 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - Ignore upstream `.rules` "HARD RULE" about adding a banner to README.md (meant for upstream PRs).
 
 ### Open Issues
-- Dev builds identify as **Stable** (`crates/zed/RELEASE_CHANNEL` = stable): they share Zed's single-instance port
-  (44438), log file `~/Library/Logs/Zed/Zed.log` and keychain service name → fix in the rebrand (do it next).
-- `cargo test` not run yet (upstream tests may assume Zed defaults: theme, docks, status bar items).
+- `cargo test` not run yet (upstream tests may assume Zed defaults: theme, docks, status bar items, names).
+- Bolt starts with empty settings (`~/.config/bolt`); Zed settings are not imported (user may copy them by hand).
 
 ### Next Steps (wait for the user to pick)
-1. User check of activity bar + status bar project/branch.
-2. Rebrand + isolation (name Bolt, `com.spadari.bolt`, own channel/port/dirs/keychain, CLI name).
-3. `script/bolt-sync` + release `.app` bundle; then P1 gap analysis (`notes/vscode-scm-parity.md`).
+1. User check of rebrand + shared sidebar width (also with installed Zed open at the same time).
+2. `script/bolt-sync` + release `.app` bundle (app icon, CLI name); then P1 gap analysis (`notes/vscode-scm-parity.md`).
 
 ### Useful Context
 - Xcode 26 needs `xcodebuild -downloadComponent MetalToolchain` (done) or `gpui_apple` fails.

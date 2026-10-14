@@ -75,7 +75,10 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ✅ Defaults: project, outline and git panels docked left (Zed 1.x puts them right); worktree name hidden in title bar
 - ✅ Read upstream `.rules` (Rust guidelines: no `unwrap`, no `let _ =` on fallible ops, no `mod.rs`, `[lib] path`)
   and macOS build docs. Ignore its README "HARD RULE" banner: it is for upstream PRs, not Bolt
-- ⏳ Rebrand: app name, bundle ID, icon, data/config/log/socket paths (`paths` crate), CLI binary name
+- ✅ Rebrand: name Bolt, bundle ID `com.spadari.bolt`, binary `target/debug/bolt`, own dirs + log, own instance port,
+  URL scheme `bolt`. Verified: running without `--user-data-dir` leaves Zed's log/dirs untouched. ⏳ app icon, CLI name
+  (bundle step). Keychain: Zed keys credentials by server URL (shared with Zed), harmless since Bolt never signs in.
+- ✅ Left sidebar: one shared width for all panels, still drag-resizable
 - ✅ Minimal strip per `notes/minimal-strip.md` (map: `notes/minimal-strip-map.md`): AI + Threads, edit predictions,
   collab/sign-in/user menu, telemetry, auto-update, debugger, remote dev, REPL, vim onboarding. Startup sign-in removed
   (it reused the installed Zed's keychain credentials). Network check: after first-run extension installs, no outgoing
@@ -83,7 +86,7 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ✅ Restricted Mode off by default (`trust_all_worktrees: true`; set `false` to get the prompt back)
 - ✅ VS Code-style activity bar: left dock panel icons in a vertical bar on the far left (bigger icons); project name +
   branch moved from the title bar to the status bar (bottom left). Build + run OK, user check pending
-- ⏳ Verify side-by-side run with installed Zed (separate settings, no shared DB, no single-instance clash)
+- 🚧 Verify side-by-side run with installed Zed (dirs/port/log verified separate; user to try both open together)
 - ⏳ Release build + `.app` bundle script (`script/bundle-mac` adapted)
 - ✅ Upstream sync strategy documented (`notes/upstream-sync.md`)
 - ✅ Base on a stable tag (not `main`), `.bolt-zed-version` file, `git rerere` enabled
@@ -143,6 +146,12 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/workspace/src/dock.rs` | `PanelButtons::vertical()` (column, Medium icons, Large buttons, menu to the right) | activity bar |
 | `crates/workspace/src/workspace.rs` | `activity_bar` field, `render_activity_bar` before the left dock (4 layouts), left dock buttons out of status bar, drag resize minus `BOLT_ACTIVITY_BAR_WIDTH` | VS Code-style activity bar |
 | `crates/title_bar/src/title_bar.rs` | `mod bolt_project_status`, status item registration in `init`, project items hidden in title bar | project name + branch in status bar |
+| `crates/workspace/src/dock.rs` (width) | left dock: `should_resize_all_panels` always true; on panel switch the new panel takes the current width | one shared, resizable sidebar width |
+| `crates/paths/src/paths.rs` | `APP_NAME = "Bolt"` | own dirs: `~/.config/bolt`, `~/Library/Application Support/Bolt`, `~/Library/Logs/Bolt` |
+| `crates/release_channel/src/lib.rs` | `display_name` Bolt…, `app_id` `com.spadari.bolt…` | identity |
+| `crates/zed/src/zed/mac_only_instance.rs` | `BOLT_INSTANCE_PORT_OFFSET = 3000` | no single-instance clash with Zed (Bolt stable uid 501 = 47438) |
+| `crates/zed/Cargo.toml` (rebrand) | `[[bin]] name = "bolt"`, `default-run`, bundle-dev/stable identifier/name, URL scheme `bolt` | binary must match `APP_NAME` (upstream guard in main.rs) |
+| `crates/zed/src/zed/app_menus.rs` (rebrand) | "Bolt" app menu, About/Hide/Quit Bolt | labels |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -162,3 +171,4 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 
 - 2026-10-14: minimal strip done; found that dev builds identify as the Stable channel (`crates/zed/RELEASE_CHANNEL`)
   and share Zed's single-instance port 44438 and log file → fix in the rebrand. Activity bar + status bar project items.
+- 2026-10-14: rebrand + shared sidebar width (ae19e5da62). Dev builds no longer need `--user-data-dir`.
