@@ -53,6 +53,8 @@ actions!(
         Commit,
         /// Merges a branch into the current one without committing (`git merge --no-commit --no-ff`).
         MergeBranch,
+        /// Creates a new branch from a chosen ref and switches to it.
+        CreateBranchFrom,
     ]
 );
 
@@ -66,7 +68,10 @@ pub fn init(cx: &mut App) {
             }
         });
         workspace.register_action(|workspace, _: &MergeBranch, window, cx| {
-            merge_picker::open(workspace, window, cx);
+            merge_picker::open(workspace, merge_picker::Mode::Merge, window, cx);
+        });
+        workspace.register_action(|workspace, _: &CreateBranchFrom, window, cx| {
+            merge_picker::open(workspace, merge_picker::Mode::CreateFrom, window, cx);
         });
     })
     .detach();
@@ -703,6 +708,7 @@ impl ScmPanel {
                         .submenu("Branch", |menu, _, _| {
                             menu.action("Merge Branch…", MergeBranch.boxed_clone())
                                 .action("Create Branch…", zed_actions::git::Branch.boxed_clone())
+                                .action("Create Branch From…", CreateBranchFrom.boxed_clone())
                                 .action(
                                     "Rename Branch…",
                                     git::RenameBranch { branch: None }.boxed_clone(),

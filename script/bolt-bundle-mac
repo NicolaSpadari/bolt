@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# BOLT: builds target/release/Bolt.app (release build, Bolt icon, ad-hoc signature) for local use.
+# Zed's script/bundle-mac depends on Zed's release infrastructure (cargo-bundle fork, notarization, Sentry); this is
+# the minimal local equivalent.
+# Usage: script/bolt-bundle-mac [--clean] [--install]
+#   --clean    cargo clean first (full rebuild from scratch)
+#   --install  copy the bundle to /Applications/Bolt.app
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$repo_root"
+
+clean=false
+install=false
+for argument in "$@"; do
+    case "$argument" in
+        --clean) clean=true ;;
+        --install) install=true ;;
+        *) echo "unknown option: $argument" >&2; exit 1 ;;
+    esac
+done
+
+if $clean; then
+    cargo clean
+fi
+
+cargo build --release --package zed --package cli
+
+version="$(sed -n 's/^version = "\(.*\)"/\1/p' crates/zed/Cargo.toml | head -1)"
+app="target/release/Bolt.app"
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp target/release/bolt "$app/Contents/MacOS/bolt"
+cp target/release/cli "$app/Contents/MacOS/cli"
+cp crates/zed/resources/Document.icns "$app/Contents/Resources/Document.icns"
+
+# App icon from the generated PNGs (see script/bolt-generate-icons.swift).
+iconset="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$iconset"
+source_icon="crates/zed/resources/app-icon@2x.png"
+for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" "$source_icon" --out "$iconset/icon_${size}x${size}.png" >/dev/null
+    double=$((size * 2))
+    sips -z "$double" "$double" "$source_icon" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
+
+python3 - "$app/Contents/Info.plist" "$version" crates/zed/resources/info/*.plist <<'PY'
+import plistlib, re, sys
+
+output, version, *fragments = sys.argv[1:]
+info = {
+    "CFBundleDevelopmentRegion": "en",
+    "CFBundleDisplayName": "Bolt",
+    "CFBundleExecutable": "bolt",
+    "CFBundleIconFile": "AppIcon",
+    "CFBundleIdentifier": "com.spadari.bolt",
+    "CFBundleInfoDictionaryVersion": "6.0",
+    "CFBundleName": "Bolt",
+    "CFBundlePackageType": "APPL",
+    "CFBundleShortVersionString": version,
+    "CFBundleVersion": version,
+    "LSApplicationCategoryType": "public.app-category.developer-tools",
+    "LSMinimumSystemVersion": "10.15.7",
+    "NSHighResolutionCapable": True,
+    "CFBundleURLTypes": [{"CFBundleURLName": "Bolt", "CFBundleURLSchemes": ["bolt"]}],
+}
+for fragment in fragments:
+    text = open(fragment, encoding="utf-8").read().replace("Zed", "Bolt")
+    wrapped = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict>' + text + "</dict></plist>"
+    )
+    info.update(plistlib.loads(wrapped.encode("utf-8")))
+with open(output, "wb") as file:
+    plistlib.dump(info, file)
+PY
+
+codesign --force --deep --sign - "$app" >/dev/null 2>&1
+echo "Built $app (Bolt $version)"
+
+if $install; then
+    rm -rf /Applications/Bolt.app
+    cp -R "$app" /Applications/Bolt.app
+    echo "Installed /Applications/Bolt.app"
+fi

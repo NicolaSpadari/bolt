@@ -1,5 +1,7 @@
-//! BOLT: branch picker for "Merge Branch…": `git merge --no-commit --no-ff <branch>` into the current branch, leaving
-//! the result uncommitted for review (same as the user's `branch:merge` alias).
+//! BOLT: branch pickers of the source control panel.
+//! - "Merge Branch…" runs the user's `branch:merge` shell alias (`git merge --no-commit --no-ff <branch>`) into the
+//!   current branch, leaving the result uncommitted for review.
+//! - "Create Branch From…" picks a base branch, then asks for the new branch name (`git switch -c <name> <base>`).
 
 use std::sync::Arc;
 
@@ -10,7 +12,18 @@ use project::git_store::Repository;
 use ui::{HighlightedLabel, ListItem, ListItemSpacing, prelude::*};
 use workspace::{Toast, Workspace, notifications::NotificationId};
 
-pub(crate) fn open(workspace: &mut Workspace, window: &mut Window, cx: &mut Context<Workspace>) {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Mode {
+    Merge,
+    CreateFrom,
+}
+
+pub(crate) fn open(
+    workspace: &mut Workspace,
+    mode: Mode,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
     let Some(repository) = workspace.project().read(cx).active_repository(cx) else {
         return;
     };
@@ -18,7 +31,7 @@ pub(crate) fn open(workspace: &mut Workspace, window: &mut Window, cx: &mut Cont
         .read(cx)
         .branch_list
         .iter()
-        .filter(|branch| !branch.is_head)
+        .filter(|branch| mode == Mode::CreateFrom || !branch.is_head)
         .cloned()
         .collect();
     let current = repository
@@ -29,6 +42,7 @@ pub(crate) fn open(workspace: &mut Workspace, window: &mut Window, cx: &mut Cont
     let weak_workspace = workspace.weak_handle();
     workspace.toggle_modal(window, cx, |window, cx| {
         let delegate = MergePickerDelegate {
+            mode,
             workspace: weak_workspace,
             repository,
             current,
@@ -41,6 +55,7 @@ pub(crate) fn open(workspace: &mut Workspace, window: &mut Window, cx: &mut Cont
 }
 
 pub(crate) struct MergePickerDelegate {
+    mode: Mode,
     workspace: WeakEntity<Workspace>,
     repository: Entity<Repository>,
     current: Option<SharedString>,
@@ -70,9 +85,12 @@ impl PickerDelegate for MergePickerDelegate {
     }
 
     fn placeholder_text(&self, _: &mut Window, _: &mut App) -> Arc<str> {
-        match &self.current {
-            Some(current) => format!("Select a branch to merge into \"{current}\"").into(),
-            None => "Select a branch to merge".into(),
+        match (self.mode, &self.current) {
+            (Mode::CreateFrom, _) => "Select a ref to create the branch from".into(),
+            (Mode::Merge, Some(current)) => {
+                format!("Select a branch to merge into \"{current}\"").into()
+            }
+            (Mode::Merge, None) => "Select a branch to merge".into(),
         }
     }
 
@@ -112,13 +130,39 @@ impl PickerDelegate for MergePickerDelegate {
         let Some(branch) = self.branches.get(*branch_ix) else {
             return;
         };
-        merge_no_commit(
-            self.workspace.clone(),
-            self.repository.clone(),
-            branch.name().to_string(),
-            window,
-            cx,
-        );
+        let branch_name = branch.name().to_string();
+        match self.mode {
+            Mode::Merge => merge_no_commit(
+                self.workspace.clone(),
+                self.repository.clone(),
+                branch_name,
+                window,
+                cx,
+            ),
+            Mode::CreateFrom => {
+                let workspace = self.workspace.clone();
+                let repository = self.repository.clone();
+                window.defer(cx, move |window, cx| {
+                    workspace
+                        .update(cx, |workspace, cx| {
+                            let weak_workspace = workspace.weak_handle();
+                            workspace.toggle_modal(window, cx, |window, cx| {
+                                Picker::uniform_list(
+                                    NewBranchNameDelegate {
+                                        workspace: weak_workspace,
+                                        repository,
+                                        base: branch_name.into(),
+                                        name: String::new(),
+                                    },
+                                    window,
+                                    cx,
+                                )
+                            });
+                        })
+                        .ok();
+                });
+            }
+        }
         cx.emit(gpui::DismissEvent);
     }
 
@@ -196,9 +240,17 @@ pub(crate) fn merge_no_commit(
         .as_ref()
         .map(|branch| branch.name().to_string())
         .unwrap_or_else(|| "HEAD".to_string());
+    // The user's own alias, through their login shell; plain git when the alias is not defined.
     let output = cx.background_spawn(async move {
-        util::command::new_std_command("git")
-            .args(["merge", "--no-commit", "--no-ff", &branch])
+        util::command::new_std_command("zsh")
+            .args([
+                "-i",
+                "-c",
+                "if alias branch:merge >/dev/null 2>&1; then branch:merge \"$1\"; else git merge --no-commit --no-ff \"$1\"; fi",
+                "zsh",
+                &branch,
+            ])
+            .stdin(std::process::Stdio::null())
             .current_dir(work_directory.as_ref())
             .output()
             .map(|output| (branch, output))
@@ -251,4 +303,102 @@ pub(crate) fn relative_time(timestamp: i64) -> String {
         _ => (seconds / 31_536_000, "year"),
     };
     format!("{value} {unit}{} ago", if value == 1 { "" } else { "s" })
+}
+
+/// Second step of "Create Branch From…": the query is the new branch name.
+struct NewBranchNameDelegate {
+    workspace: WeakEntity<Workspace>,
+    repository: Entity<Repository>,
+    base: SharedString,
+    name: String,
+}
+
+impl PickerDelegate for NewBranchNameDelegate {
+    type ListItem = ListItem;
+
+    fn name() -> &'static str {
+        "BoltNewBranchName"
+    }
+
+    fn match_count(&self) -> usize {
+        usize::from(!self.name.trim().is_empty())
+    }
+
+    fn selected_index(&self) -> usize {
+        0
+    }
+
+    fn set_selected_index(&mut self, _: usize, _: &mut Window, _: &mut Context<Picker<Self>>) {}
+
+    fn placeholder_text(&self, _: &mut Window, _: &mut App) -> Arc<str> {
+        format!("New branch name (from \"{}\")", self.base).into()
+    }
+
+    fn update_matches(
+        &mut self,
+        query: String,
+        _: &mut Window,
+        cx: &mut Context<Picker<Self>>,
+    ) -> Task<()> {
+        self.name = query;
+        cx.notify();
+        Task::ready(())
+    }
+
+    fn confirm(&mut self, _: bool, _: &mut Window, cx: &mut Context<Picker<Self>>) {
+        let name = self.name.trim().replace(' ', "-");
+        if name.is_empty() {
+            return;
+        }
+        let create = self.repository.update(cx, |repository, _| {
+            repository.create_branch(name, Some(self.base.to_string()))
+        });
+        let workspace = self.workspace.clone();
+        cx.spawn(async move |_, cx| {
+            let result: anyhow::Result<()> = async { create.await? }.await;
+            if let Err(error) = result
+                && let Some(workspace) = workspace.upgrade()
+            {
+                cx.update(|cx| {
+                    git_ui_core::notifications::show_error_toast(
+                        workspace,
+                        "create branch",
+                        error,
+                        cx,
+                    )
+                });
+            }
+        })
+        .detach();
+        cx.emit(gpui::DismissEvent);
+    }
+
+    fn dismissed(&mut self, _: &mut Window, cx: &mut Context<Picker<Self>>) {
+        cx.emit(gpui::DismissEvent);
+    }
+
+    fn render_match(
+        &self,
+        ix: usize,
+        selected: bool,
+        _: &mut Window,
+        _: &mut Context<Picker<Self>>,
+    ) -> Option<Self::ListItem> {
+        let name = self.name.trim().replace(' ', "-");
+        Some(
+            ListItem::new(("bolt-new-branch", ix))
+                .inset(true)
+                .spacing(ListItemSpacing::Sparse)
+                .toggle_state(selected)
+                .start_slot(
+                    Icon::new(IconName::GitBranchPlus)
+                        .size(IconSize::Small)
+                        .color(Color::Muted),
+                )
+                .child(Label::new(format!(
+                    "Create branch \"{name}\" from \"{}\"",
+                    self.base
+                ))),
+        )
+    }
 }
