@@ -32,11 +32,12 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - Ignore upstream `.rules` "HARD RULE" about adding a banner to README.md (meant for upstream PRs).
 
 ### Open Issues
-- `cargo test` not run yet (upstream tests may assume Zed defaults: theme, docks, status bar items, names).
+- `cargo test -p project_panel`: 2 layout tests fail since the Bolt layout changes (see PROGRESS log); other crates'
+  tests not run yet.
 - Bolt starts with empty settings (`~/.config/bolt`); Zed settings are not imported (user may copy them by hand).
 
 ### Next Steps (wait for the user to pick)
-1. User check of rebrand + shared sidebar width (also with installed Zed open at the same time).
+1. User check of file nesting (P3) + rebrand + shared sidebar width.
 2. `script/bolt-sync` + release `.app` bundle (app icon, CLI name); then P1 gap analysis (`notes/vscode-scm-parity.md`).
 
 ### Useful Context

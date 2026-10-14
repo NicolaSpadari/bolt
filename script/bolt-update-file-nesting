@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# BOLT: refresh the bundled file nesting patterns from github.com/antfu/vscode-file-nesting-config (MIT).
+# Writes crates/project_panel/src/bolt_nesting_patterns.jsonc: the README's settings block verbatim, embedded in the
+# binary (see bolt_nesting.rs). A newer block can also be pasted over it by hand.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+target_dir="$repo_root/crates/project_panel/src"
+checkout="$(mktemp -d)"
+trap 'rm -rf "$checkout"' EXIT
+
+git clone --quiet --depth 1 https://github.com/antfu/vscode-file-nesting-config.git "$checkout"
+commit="$(git -C "$checkout" rev-parse --short HEAD)"
+
+python3 - "$checkout/README.md" "$target_dir/bolt_nesting_patterns.jsonc" <<'PY'
+import re, sys
+
+readme, output = sys.argv[1:3]
+text = open(readme, encoding="utf-8").read()
+block = re.search(r"```jsonc\n(.*?)```", text, re.S).group(1)
+# Verbatim copy of the README settings block, so it can also be pasted by hand.
+open(output, "w", encoding="utf-8").write(block)
+print("patterns", re.search(r"// updated (.+)", block).group(0).strip("/ "))
+PY
+echo "antfu commit $commit"

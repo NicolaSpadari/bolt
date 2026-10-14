@@ -1,3 +1,5 @@
+// BOLT: VS Code-style file nesting.
+mod bolt_nesting;
 pub mod project_panel_settings;
 mod undo;
 mod utils;
@@ -111,6 +113,8 @@ struct State {
     temporarily_unfolded_pending_state: Option<TemporaryUnfoldedPendingState>,
     unfolded_dir_ids: HashSet<ProjectEntryId>,
     expanded_dir_ids: HashMap<WorktreeId, Vec<ProjectEntryId>>,
+    // BOLT: file nesting of the visible entries.
+    bolt_nesting: bolt_nesting::NestingState,
 }
 
 impl State {
@@ -131,6 +135,7 @@ impl State {
             temporarily_unfolded_pending_state: None,
             unfolded_dir_ids: old.unfolded_dir_ids.clone(),
             expanded_dir_ids: old.expanded_dir_ids.clone(),
+            bolt_nesting: Default::default(),
         }
     }
 }
@@ -911,6 +916,7 @@ impl ProjectPanel {
                     ancestors: Default::default(),
                     expanded_dir_ids: Default::default(),
                     unfolded_dir_ids: Default::default(),
+                    bolt_nesting: Default::default(),
                 },
                 update_visible_entries_task: Default::default(),
                 undo_manager: UndoManager::new(
@@ -1502,6 +1508,9 @@ impl ProjectPanel {
                         cx.notify();
                     }
                 }
+            } else if self.state.bolt_nesting.is_parent(entry.id) {
+                // BOLT: expand nested files.
+                self.bolt_set_nested_expanded(entry.id, true, window, cx);
             }
         }
     }
@@ -1515,6 +1524,11 @@ impl ProjectPanel {
         let Some((worktree, entry)) = self.selected_entry_handle(cx) else {
             return;
         };
+        // BOLT: collapse nested files.
+        if self.state.bolt_nesting.is_parent(entry.id) {
+            self.bolt_set_nested_expanded(entry.id, false, window, cx);
+            return;
+        }
         self.collapse_entry(entry.clone(), worktree, window, cx)
     }
 
@@ -4769,6 +4783,17 @@ impl ProjectPanel {
                             sort_mode,
                             sort_order,
                         );
+                        // BOLT: file nesting.
+                        bolt_nesting::apply(
+                            &mut visible_worktree_entries,
+                            new_state
+                                .expanded_dir_ids
+                                .get(&worktree_id)
+                                .map(Vec::as_slice)
+                                .unwrap_or(&[]),
+                            NEW_ENTRY_ID,
+                            &mut new_state.bolt_nesting,
+                        );
                         new_state.visible_entries.push(VisibleEntriesForWorktree {
                             worktree_id,
                             entries: visible_worktree_entries,
@@ -6419,6 +6444,11 @@ impl ProjectPanel {
                         let click_count = event.click_count();
                         let focus_opened_item = click_count > 1;
                         let allow_preview = preview_tabs_enabled && click_count == 1;
+                        // BOLT: clicking a nesting parent also toggles its nested files.
+                        if click_count == 1 && project_panel.state.bolt_nesting.is_parent(entry_id)
+                        {
+                            project_panel.bolt_toggle_nested(entry_id, window, cx);
+                        }
                         project_panel.open_entry(entry_id, focus_opened_item, allow_preview, cx);
                     }
                 }),
@@ -6909,7 +6939,13 @@ impl ProjectPanel {
                 } else {
                     None
                 };
-                (None, icon)
+                // BOLT: nesting parents get a chevron.
+                let chevron = if self.state.bolt_nesting.is_parent(entry.id) {
+                    FileIcons::get_chevron_icon(is_expanded, cx)
+                } else {
+                    None
+                };
+                (chevron, icon)
             }
             _ => {
                 let indicator = FileIcons::get_folder_indicators(
@@ -6925,6 +6961,8 @@ impl ProjectPanel {
         let path_style = self.project.read(cx).path_style(cx);
         let (depth, difference) =
             ProjectPanel::calculate_depth_and_difference(entry, entries_paths);
+        // BOLT: nested files sit one level under their parent.
+        let depth = depth + usize::from(self.state.bolt_nesting.is_nested(entry.id));
 
         let filename = if difference > 1 {
             entry

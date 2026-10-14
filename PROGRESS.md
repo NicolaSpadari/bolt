@@ -43,7 +43,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
   for it (origin unknown, user's own work).
 - Default icon theme: **Material Icon Theme bundled natively** (no extension), copied from
   `zed-extensions/material-icon-theme` (Apache-2.0, LICENSE shipped next to it). Rendered in color straight from the
-  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `script/bolt-generate-icons.swift`, `crates/zed/resources/bolt-icon.*`, app-icon PNGs (replaced), independent of upstream syncs.
+  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `script/bolt-update-file-nesting`, `crates/project_panel/src/bolt_nesting*` (code, antfu block verbatim `.jsonc`, MIT LICENSE), `script/bolt-generate-icons.swift`, `crates/zed/resources/bolt-icon.*`, app-icon PNGs (replaced), independent of upstream syncs.
 - All Bolt work is committed directly on `main` (no feature branches).
 
 ## Open decisions (ask the user before acting)
@@ -121,12 +121,13 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
 - ⏳ Keep Zed's multibuffer project search reachable (e.g. "open in editor" like VS Code's "Open in editor")
 
 ### P3 — File nesting (antfu style)
-- ⏳ Settings: `file_nesting.enabled`, `file_nesting.expand`, `file_nesting.patterns` (VS Code
-  `explorer.fileNesting.patterns` syntax: `"package.json": "package-lock.json, pnpm-*.yaml, .npmrc, …"`,
-  `$(capture)` / `*` support)
-- ⏳ Nesting applied in `project_panel` entry building; parent row shows expand chevron; git/diagnostic decorations
-  bubble up to the parent
-- ⏳ Ship antfu's default pattern set as a preset (credit: https://github.com/antfu/vscode-file-nesting-config, MIT)
+- ✅ Always on, no setting (user decision). Patterns: `crates/project_panel/src/bolt_nesting_patterns.jsonc` = antfu's
+  README settings block **verbatim** (update: `script/bolt-update-file-nesting`, or paste a newer block over it).
+  Semantics: VS Code `explorer.fileNesting.patterns` (`*` + `$(capture)`, globs), files only, same directory, one level,
+  case-insensitive; exact parent keys win over wildcard ones. Collapsed by default (like `expand: false`).
+- ✅ UI: chevron on parents, nested files one level deeper; click on parent opens it and toggles; →/← expand/collapse.
+- ⏳ Git/diagnostic decorations of nested files bubbling up to the collapsed parent; auto-expand parent when revealing
+  a nested active file.
 
 ### Backlog (on request)
 - Timeline / file history view, Outline in sidebar, … (add here when the user asks)
@@ -156,6 +157,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/zed/src/zed/mac_only_instance.rs` | `BOLT_INSTANCE_PORT_OFFSET = 3000` | no single-instance clash with Zed (Bolt stable uid 501 = 47438) |
 | `crates/zed/Cargo.toml` (rebrand) | `[[bin]] name = "bolt"`, `default-run`, bundle-dev/stable identifier/name, URL scheme `bolt` | binary must match `APP_NAME` (upstream guard in main.rs) |
 | `crates/zed/src/zed/app_menus.rs` (rebrand) | "Bolt" app menu, About/Hide/Quit Bolt | labels |
+| `crates/project_panel/src/project_panel.rs` | `mod bolt_nesting`, `State.bolt_nesting`, `bolt_nesting::apply` after sort, chevron + depth in `details_for_entry`, click toggles nest, ←/→ on nest parents | file nesting (logic in `bolt_nesting.rs`) |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -176,3 +178,6 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: minimal strip done; found that dev builds identify as the Stable channel (`crates/zed/RELEASE_CHANNEL`)
   and share Zed's single-instance port 44438 and log file → fix in the rebrand. Activity bar + status bar project items.
 - 2026-10-14: rebrand + shared sidebar width (ae19e5da62). Dev builds no longer need `--user-data-dir`.
+- 2026-10-14: file nesting (P3) done. `cargo test -p project_panel`: 137 pass, 2 pixel/mouse layout tests fail
+  (`test_collapse_selected_entry_does_not_scroll_visible_parent`, `test_focus_follows_mouse_into_blank_area`), also
+  without nesting → caused by earlier Bolt layout changes (activity bar / left docks), to look at later.
