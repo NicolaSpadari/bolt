@@ -39,7 +39,11 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
   REPL/Jupyter, vim/helix modes.
 - Base: Zed **v1.23.3**. Hosting: private repo `NicolaSpadari/bolt` on the **personal** GitHub account; repo-local git
   identity `Nicola Spadari <spadari.nicola@gmail.com>` (never the work account/email).
-- Default theme: user's custom **One Dark Pro Cursor** (dark mode), bundled as Bolt's default.
+- Default theme: user's custom **One Dark Pro Cursor** (dark mode), bundled as Bolt's default. No third-party credit
+  for it (origin unknown, user's own work).
+- Default icon theme: **Material Icon Theme bundled natively** (no extension), copied from
+  `zed-extensions/material-icon-theme` (MIT — its license notice must ship). Refreshed by a `script/bolt-update-icons`
+  script, independent of upstream syncs.
 
 ## Open decisions (ask the user before acting)
 - none
@@ -60,7 +64,13 @@ never rebased; feature branches `bolt/<feature>`. Full strategy + design rules: 
 
 ### P0 — Fork & setup
 - ⏳ Clone Zed into `~/Projects/bolt`, remote `upstream`, record base commit + Zed version in the Log
-- ⏳ Toolchain check (rustup per `rust-toolchain.toml`, Xcode + Metal toolchain, cmake) and first `cargo run` build
+- ✅ Clone on v1.23.3, private repo `NicolaSpadari/bolt`, repo-local identity + credential helper, rerere
+- ✅ Toolchain: Rust 1.98.1 (auto via rustup), cmake (brew), Metal Toolchain (Xcode 26 needs
+  `xcodebuild -downloadComponent MetalToolchain`, else `gpui_apple` build fails)
+- ✅ First debug build (`cargo build`, ~10 min cold; `target/` ~15 GB). Smoke run isolated with
+  `./target/debug/zed --user-data-dir /tmp/bolt-smoke` (never run dev builds without it until the rebrand: they would
+  share `~/.config/zed` and Zed's data dir)
+- ⏳ Default theme One Dark Pro Cursor + native Material Icon Theme
 - ⏳ Read upstream `CLAUDE.md` / `.rules` / `CONTRIBUTING.md` / `docs/src/development/macos.md` and adopt conventions
 - ⏳ Rebrand: app name, bundle ID, icon, data/config/log/socket paths (`paths` crate), CLI binary name
 - ⏳ Minimal strip per `notes/minimal-strip.md`: AI + Threads, edit predictions, collab/account, telemetry, crash
@@ -114,3 +124,6 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
 - 2026-10-14: upstream sync strategy defined. Checked upstream root: has `CLAUDE.md`, `AGENTS.md`, `.rules` (no
   `PROGRESS.md`/`HANDOVER.md`/`notes/`); workspace `members` is an explicit list; latest stable tag v1.23.3.
   User confirmed sync strategy, bundle ID, minimal scope, git panel replacement. Root `CLAUDE.md` removed.
+  Cloned v1.23.3 (base commit 96a1b1b538), pushed to private `NicolaSpadari/bolt`, first debug build + isolated smoke
+  run OK. Icon theme note: embedded SVGs render as single-color masks, so Material icons must be extracted to disk at
+  startup and loaded as external icons (like extensions do), from a `bolt_*` crate.
