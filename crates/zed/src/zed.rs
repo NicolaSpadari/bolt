@@ -2444,8 +2444,6 @@ fn hide_bolt_removed_actions(cx: &mut App) {
         filter.hide_action_types(&[
             TypeId::of::<zed_actions::OpenRemote>(),
             TypeId::of::<zed_actions::OpenDevContainer>(),
-            TypeId::of::<zed_actions::wsl_actions::OpenWsl>(),
-            TypeId::of::<zed_actions::wsl_actions::OpenFolderInWsl>(),
             TypeId::of::<editor::actions::ToggleBreakpoint>(),
             TypeId::of::<editor::actions::EnableBreakpoint>(),
             TypeId::of::<editor::actions::DisableBreakpoint>(),
