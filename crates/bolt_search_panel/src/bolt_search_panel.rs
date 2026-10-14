@@ -6,6 +6,7 @@
 use std::{ops::Range, path::Path, pin::pin, sync::Arc, time::Duration};
 
 use anyhow::Result;
+use collections::HashSet;
 use editor::{Editor, EditorEvent, SelectionEffects, scroll::Autoscroll};
 use file_icons::FileIcons;
 use futures::StreamExt as _;
@@ -15,7 +16,7 @@ use gpui::{
     StrikethroughStyle, StyledText, Subscription, Task, UniformListScrollHandle, WeakEntity,
     Window, actions, px, uniform_list,
 };
-use language::{Anchor, Buffer, Point, ToPoint as _};
+use language::{Anchor, Buffer, BufferEvent, Point, ToPoint as _};
 use project::{
     Project,
     search::{SearchQuery, SearchResult},
@@ -34,6 +35,7 @@ use workspace::{
 
 const SEARCH_PANEL_KEY: &str = "BoltSearchPanel";
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(250);
+const REFRESH_DEBOUNCE: Duration = Duration::from_millis(600);
 const PREVIEW_CONTEXT_CHARS: usize = 24;
 
 actions!(
@@ -146,6 +148,9 @@ pub struct SearchPanel {
     scroll_handle: UniformListScrollHandle,
     pending_search: Option<Task<()>>,
     debounce: Option<Task<()>>,
+    /// Files collapsed by the user, kept collapsed across live refreshes.
+    collapsed_paths: HashSet<Arc<Path>>,
+    buffer_subscriptions: Vec<Subscription>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -184,9 +189,9 @@ impl SearchPanel {
                 subscriptions.push(cx.subscribe_in(
                     editor,
                     window,
-                    |this: &mut Self, _, event: &EditorEvent, window, cx| {
+                    |this: &mut Self, _, event: &EditorEvent, _, cx| {
                         if let EditorEvent::BufferEdited = event {
-                            this.schedule_search(window, cx);
+                            this.schedule_search(cx);
                         }
                     },
                 ));
@@ -197,6 +202,31 @@ impl SearchPanel {
                 |_: &mut Self, _, event: &EditorEvent, _, cx| {
                     if let EditorEvent::BufferEdited = event {
                         cx.notify();
+                    }
+                },
+            ));
+            // Live update: re-run the search when non-ignored files change on disk.
+            subscriptions.push(cx.subscribe(
+                &project,
+                |this: &mut Self, project, event: &project::Event, cx| {
+                    if let project::Event::WorktreeUpdatedEntries(worktree_id, entries) = event
+                        && this.active_query.is_some()
+                    {
+                        let include_ignored = !this.use_ignore_files;
+                        let relevant = project
+                            .read(cx)
+                            .worktree_for_id(*worktree_id, cx)
+                            .is_some_and(|worktree| {
+                                let worktree = worktree.read(cx);
+                                entries.iter().any(|(_, entry_id, _)| {
+                                    worktree.entry_for_id(*entry_id).is_none_or(|entry| {
+                                        entry.is_file() && (include_ignored || !entry.is_ignored)
+                                    })
+                                })
+                            });
+                        if relevant {
+                            this.schedule_refresh(cx);
+                        }
                     }
                 },
             ));
@@ -224,17 +254,34 @@ impl SearchPanel {
                 scroll_handle: UniformListScrollHandle::new(),
                 pending_search: None,
                 debounce: None,
+                collapsed_paths: HashSet::default(),
+                buffer_subscriptions: Vec::new(),
                 _subscriptions: subscriptions,
             }
         })
     }
 
-    fn schedule_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.debounce = Some(cx.spawn_in(window, async move |this, cx| {
+    fn schedule_search(&mut self, cx: &mut Context<Self>) {
+        self.debounce = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(SEARCH_DEBOUNCE).await;
-            this.update_in(cx, |this, window, cx| this.search(window, cx))
+            this.update(cx, |this, cx| this.search(cx)).log_err();
+        }));
+    }
+
+    /// Re-runs the current search after files changed, keeping collapsed files collapsed.
+    fn schedule_refresh(&mut self, cx: &mut Context<Self>) {
+        if self.debounce.is_some() {
+            return;
+        }
+        self.debounce = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(REFRESH_DEBOUNCE).await;
+            this.update(cx, |this, cx| this.run_search(true, cx))
                 .log_err();
         }));
+    }
+
+    fn search(&mut self, cx: &mut Context<Self>) {
+        self.run_search(false, cx);
     }
 
     fn build_query(&self, cx: &App) -> Result<Option<SearchQuery>> {
@@ -286,9 +333,20 @@ impl SearchPanel {
         Ok(Some(query))
     }
 
-    fn search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn run_search(&mut self, keep_collapsed: bool, cx: &mut Context<Self>) {
         self.debounce = None;
         self.pending_search = None;
+        self.buffer_subscriptions.clear();
+        if keep_collapsed {
+            self.collapsed_paths = self
+                .results
+                .iter()
+                .filter(|file| file.collapsed)
+                .map(|file| file.path.clone())
+                .collect();
+        } else {
+            self.collapsed_paths.clear();
+        }
         self.results.clear();
         self.selected_row = None;
         self.limit_reached = false;
@@ -314,7 +372,7 @@ impl SearchPanel {
         let search = self
             .project
             .update(cx, |project, cx| project.search(query, cx));
-        self.pending_search = Some(cx.spawn_in(window, async move |this, cx| {
+        self.pending_search = Some(cx.spawn(async move |this, cx| {
             let task_handle = search.task_handle;
             let mut chunks = pin!(search.rx.ready_chunks(256));
             while let Some(results) = chunks.next().await {
@@ -346,10 +404,24 @@ impl SearchPanel {
         cx.notify();
     }
 
-    fn add_result(&mut self, buffer: Entity<Buffer>, ranges: Vec<Range<Anchor>>, cx: &App) {
+    fn add_result(
+        &mut self,
+        buffer: Entity<Buffer>,
+        ranges: Vec<Range<Anchor>>,
+        cx: &mut Context<Self>,
+    ) {
         if ranges.is_empty() {
             return;
         }
+        // Live update: unsaved edits to a file with results re-run the search.
+        self.buffer_subscriptions.push(cx.subscribe(
+            &buffer,
+            |this: &mut Self, _, event: &BufferEvent, cx| {
+                if let BufferEvent::Edited { .. } = event {
+                    this.schedule_refresh(cx);
+                }
+            },
+        ));
         let buffer_ref = buffer.read(cx);
         let Some(file) = buffer_ref.file() else {
             return;
@@ -388,13 +460,14 @@ impl SearchPanel {
                 }
             })
             .collect();
+        let collapsed = self.collapsed_paths.contains(&path);
         let result = FileResult {
             buffer,
             path,
             file_name,
             directory,
             matches,
-            collapsed: false,
+            collapsed,
         };
         let position = self
             .results
@@ -564,12 +637,12 @@ impl SearchPanel {
     fn toggle_option(
         &mut self,
         option: fn(&mut Self) -> &mut bool,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let value = option(self);
         *value = !*value;
-        self.search(window, cx);
+        self.search(cx);
     }
 
     fn select_next(&mut self, _: &menu::SelectNext, _: &mut Window, cx: &mut Context<Self>) {
@@ -624,7 +697,7 @@ impl SearchPanel {
             }
             None => {
                 if self.results.is_empty() {
-                    self.search(window, cx);
+                    self.search(cx);
                 } else {
                     self.open_match(0, 0, true, false, window, cx);
                 }
@@ -700,9 +773,7 @@ impl SearchPanel {
                         IconButton::new("bolt-search-refresh", IconName::RotateCw)
                             .icon_size(IconSize::Small)
                             .tooltip(Tooltip::text("Refresh"))
-                            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                                this.search(window, cx)
-                            })),
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.search(cx))),
                     )
                     .child(
                         IconButton::new("bolt-search-clear", IconName::Close)
@@ -823,15 +894,18 @@ impl SearchPanel {
                     ),
             )
             .child(
-                h_flex().w_full().justify_end().child(
-                    IconButton::new("bolt-search-toggle-filters", IconName::Ellipsis)
-                        .icon_size(IconSize::Small)
-                        .toggle_state(self.filters_enabled)
-                        .tooltip(Tooltip::text("Toggle Search Details"))
-                        .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                            this.filters_enabled = !this.filters_enabled;
-                            this.search(window, cx);
-                        })),
+                // Like VS Code, the "…" toggle floats under the inputs without taking vertical space.
+                div().relative().w_full().h_0().child(
+                    div().absolute().right_0().top_0().child(
+                        IconButton::new("bolt-search-toggle-filters", IconName::Ellipsis)
+                            .icon_size(IconSize::XSmall)
+                            .toggle_state(self.filters_enabled)
+                            .tooltip(Tooltip::text("Toggle Search Details"))
+                            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
+                                this.filters_enabled = !this.filters_enabled;
+                                this.search(cx);
+                            })),
+                    ),
                 ),
             )
             .when(self.filters_enabled, |this| {
@@ -1005,7 +1079,11 @@ impl SearchPanel {
                     .indent_step_size(px(20.))
                     .spacing(ListItemSpacing::Sparse)
                     .toggle_state(is_selected)
-                    .child(render_preview(search_match, replacement, cx))
+                    .child(div().text_ui_sm(cx).child(render_preview(
+                        search_match,
+                        replacement,
+                        cx,
+                    )))
                     .end_slot(
                         h_flex()
                             .gap_0p5()

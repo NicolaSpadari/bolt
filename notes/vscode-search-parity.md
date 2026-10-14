@@ -16,12 +16,12 @@ multibuffer project search for everyday use. Status legend as in PROGRESS.
 | 9 | Click | Single click opens the file at the match (preview tab), double click pins; keyboard: Enter opens | 🚧 |
 | 10 | Row actions (hover) | Match: Replace, Dismiss; File: Replace All in file, Dismiss | 🚧 |
 | 11 | Title actions | Refresh, Clear Search Results, Collapse/Expand All, View as Tree/List, Open in Editor (→ Zed multibuffer) | ⏳ |
-| 12 | Live update | Results refresh when files change | ⏳ |
+| 12 | Live update | Results refresh when files change | 🚧 |
 | 13 | Limits | Stops at a result cap with a message | 🚧 |
 
 Notes
-- v1 (2026-10-14): rows 1–10 and 13 implemented (🚧 = built, awaiting user check). Missing: query history, tree view,
-  Open in Editor, live refresh on file changes (#11 partial: Refresh / Clear / Collapse-Expand All exist).
+- v1 (2026-10-14): rows 1–10, 12, 13 implemented. Query history and tree view dropped (user decision); Open in Editor
+  optional (#11 partial: Refresh / Clear / Collapse-Expand All exist).
 - Replace saves the touched files (like VS Code's replace-all), without opening them.
 - Zed's multibuffer project search stays reachable ("Open in Editor") but is not the default flow.
 - Verify details on a real VS Code install when in doubt.

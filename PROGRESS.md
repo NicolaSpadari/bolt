@@ -121,7 +121,9 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
   match highlighted and replace preview (strikethrough + new text), click = open at match (preview tab), double click
   = pin, hover actions (replace / dismiss), Refresh / Clear / Collapse-Expand All, keyboard up/down/enter,
   `cmd-shift-f` (seeded with the selection) / `cmd-shift-h`. Zed's multibuffer search still in the command palette.
-- ⏳ Query history, tree view, Open in Editor, live refresh on file changes.
+- ✅ Live refresh: re-runs (600 ms debounce) on edits to files with results and on non-ignored file changes on disk,
+  keeping collapsed files collapsed. Smaller preview font; "…" floats under the inputs (no vertical space).
+- ⛔ Query history and tree view (user: not needed). ⏳ Open in Editor (optional).
 
 ### P3 — File nesting (antfu style)
 - ✅ Always on, no setting (user decision). Patterns: `crates/project_panel/src/bolt_nesting_patterns.jsonc` = antfu's
@@ -168,6 +170,8 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `assets/keymaps/default-macos.json` | `cmd-shift-f` (Workspace + Pane) → `bolt_search::FocusSearch`, `cmd-shift-h` → `bolt_search::ToggleReplace` | VS Code shortcuts |
 | `crates/title_bar/src/title_bar.rs` (2) | project name back in title bar (branch only in status bar), project name `Color::Muted` | user request |
 | `assets/settings/default.json` (2) | `title_bar.show_user_menu: true` again (no account items without sign-in) | user request |
+| `assets/settings/initial_user_settings.json` | template emptied (no theme/font overrides) | Zed's template forced One Dark when Bolt first wrote the user settings file (e.g. "Hide Button") |
+| `crates/title_bar/src/bolt_project_status.rs` (2) | folder icon before the footer project name; repo button (GitHub/GitLab/Bitbucket icon) opening the `origin` web page, hidden without a remote | user request |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -192,3 +196,5 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   (`test_collapse_selected_entry_does_not_scroll_visible_parent`, `test_focus_follows_mouse_into_blank_area`), also
   without nesting → caused by earlier Bolt layout changes (activity bar / left docks), to look at later.
 - 2026-10-14: sidebar search v1 (P2); title bar tweaks (user menu back, project name in title + status bar).
+- 2026-10-14: footer repo button + folder icon; search live refresh; fixed theme reset caused by Zed's initial
+  user settings template.

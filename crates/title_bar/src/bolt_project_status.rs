@@ -71,15 +71,107 @@ impl TitleBar {
             }
         }
 
+        let web_url = repository.as_ref().and_then(|repository| {
+            let repository = repository.read(cx);
+            repository
+                .remote_origin_url
+                .as_deref()
+                .or(repository.remote_upstream_url.as_deref())
+                .and_then(remote_web_url)
+        });
+
         h_flex()
             .gap_0p5()
             .when(title_bar_settings.show_project_items, |this| {
-                this.child(self.render_project_name(project_name, window, cx))
+                this.child(
+                    h_flex()
+                        .gap_1()
+                        .child(
+                            Icon::new(IconName::Folder)
+                                .size(IconSize::Small)
+                                .color(Color::Muted),
+                        )
+                        .child(self.render_project_name(project_name, window, cx)),
+                )
             })
             .when_some(repository.filter(|_| is_git_enabled), |this, repository| {
                 this.children(self.render_worktree_and_branch(repository, linked_worktree_name, cx))
             })
+            .when_some(web_url, |this, web_url| {
+                let icon = hosting_icon(&web_url);
+                this.child(
+                    IconButton::new("bolt-open-repository", icon)
+                        .icon_size(IconSize::Small)
+                        .icon_color(Color::Muted)
+                        .tooltip(Tooltip::text("Open Repository in Browser"))
+                        .on_click(move |_, _, cx| cx.open_url(&web_url)),
+                )
+            })
             .into_any_element()
+    }
+}
+
+/// Converts a git remote (`git@host:owner/repo.git`, `ssh://git@host/owner/repo`, `https://host/owner/repo.git`) to
+/// its web page URL.
+fn remote_web_url(remote: &str) -> Option<String> {
+    let remote = remote.trim();
+    let (host, path) = if let Some(rest) = remote
+        .strip_prefix("https://")
+        .or_else(|| remote.strip_prefix("http://"))
+        .or_else(|| remote.strip_prefix("ssh://"))
+        .or_else(|| remote.strip_prefix("git://"))
+    {
+        let rest = rest
+            .rsplit_once('@')
+            .map_or(rest, |(_, host_and_path)| host_and_path);
+        let (host, path) = rest.split_once('/')?;
+        // Drop an explicit port (`ssh://git@host:22/owner/repo`).
+        (host.split(':').next()?, path)
+    } else {
+        let rest = remote
+            .rsplit_once('@')
+            .map_or(remote, |(_, host_and_path)| host_and_path);
+        rest.split_once(':')?
+    };
+    let path = path.trim_end_matches('/');
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    if host.is_empty() || path.is_empty() {
+        return None;
+    }
+    Some(format!("https://{host}/{path}"))
+}
+
+fn hosting_icon(web_url: &str) -> IconName {
+    if web_url.contains("gitlab") {
+        IconName::Gitlab
+    } else if web_url.contains("bitbucket") {
+        IconName::Bitbucket
+    } else {
+        IconName::Github
+    }
+}
+
+#[cfg(test)]
+mod bolt_tests {
+    use super::remote_web_url;
+
+    #[test]
+    fn test_remote_web_url() {
+        let expected = Some("https://github.com/owner/repo".to_string());
+        assert_eq!(remote_web_url("git@github.com:owner/repo.git"), expected);
+        assert_eq!(
+            remote_web_url("https://github.com/owner/repo.git"),
+            expected
+        );
+        assert_eq!(
+            remote_web_url("https://user@github.com/owner/repo"),
+            expected
+        );
+        assert_eq!(
+            remote_web_url("ssh://git@github.com:22/owner/repo.git"),
+            expected
+        );
+        assert_eq!(remote_web_url("/local/path"), None);
     }
 }
 
