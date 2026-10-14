@@ -126,8 +126,10 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
   Semantics: VS Code `explorer.fileNesting.patterns` (`*` + `$(capture)`, globs), files only, same directory, one level,
   case-insensitive; exact parent keys win over wildcard ones. Collapsed by default (like `expand: false`).
 - ✅ UI: chevron on parents, nested files one level deeper; click on parent opens it and toggles; →/← expand/collapse.
-- ⏳ Git/diagnostic decorations of nested files bubbling up to the collapsed parent; auto-expand parent when revealing
-  a nested active file.
+- ✅ VS Code behavior (user choice): nested files stay normal files; a collapsed parent shows its git status combined
+  with its nested files'; selecting/revealing a nested file (e.g. opening it) expands its group; ← on a nested file
+  collapses its group and selects the parent.
+- ⏳ Diagnostics (errors/warnings) of nested files are not yet combined on a collapsed parent.
 
 ### Backlog (on request)
 - Timeline / file history view, Outline in sidebar, … (add here when the user asks)

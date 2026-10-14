@@ -1524,9 +1524,14 @@ impl ProjectPanel {
         let Some((worktree, entry)) = self.selected_entry_handle(cx) else {
             return;
         };
-        // BOLT: collapse nested files.
-        if self.state.bolt_nesting.is_parent(entry.id) {
-            self.bolt_set_nested_expanded(entry.id, false, window, cx);
+        // BOLT: collapse nested files, from the parent or from one of them.
+        if let Some(parent_id) = self.state.bolt_nesting.parent_of(entry.id).or_else(|| {
+            self.state
+                .bolt_nesting
+                .is_parent(entry.id)
+                .then_some(entry.id)
+        }) {
+            self.bolt_set_nested_expanded(parent_id, false, window, cx);
             return;
         }
         self.collapse_entry(entry.clone(), worktree, window, cx)
@@ -4564,6 +4569,8 @@ impl ProjectPanel {
             .collect();
         let hide_root = settings.hide_root && visible_worktrees.len() == 1;
         let hide_hidden = settings.hide_hidden;
+        // BOLT: a newly selected nested file expands its nesting parent.
+        let bolt_reveal_id = new_selected_entry.map(|(_, entry_id)| entry_id);
 
         let visible_entries_task = cx.spawn_in(window, async move |this, cx| {
             let new_state = cx
@@ -4786,11 +4793,8 @@ impl ProjectPanel {
                         // BOLT: file nesting.
                         bolt_nesting::apply(
                             &mut visible_worktree_entries,
-                            new_state
-                                .expanded_dir_ids
-                                .get(&worktree_id)
-                                .map(Vec::as_slice)
-                                .unwrap_or(&[]),
+                            new_state.expanded_dir_ids.get_mut(&worktree_id),
+                            bolt_reveal_id,
                             NEW_ENTRY_ID,
                             &mut new_state.bolt_nesting,
                         );

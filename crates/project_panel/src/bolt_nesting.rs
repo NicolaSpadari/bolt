@@ -100,8 +100,8 @@ static RULES: LazyLock<Vec<NestingRule>> = LazyLock::new(|| {
 pub(crate) struct NestingState {
     /// Files that have nested children.
     parents: HashSet<ProjectEntryId>,
-    /// Files shown nested under a parent (rendered one level deeper).
-    nested: HashSet<ProjectEntryId>,
+    /// Files shown nested under a parent (rendered one level deeper), mapped to that parent.
+    nested: HashMap<ProjectEntryId, ProjectEntryId>,
 }
 
 impl NestingState {
@@ -110,15 +110,21 @@ impl NestingState {
     }
 
     pub(crate) fn is_nested(&self, entry_id: ProjectEntryId) -> bool {
-        self.nested.contains(&entry_id)
+        self.nested.contains_key(&entry_id)
+    }
+
+    pub(crate) fn parent_of(&self, entry_id: ProjectEntryId) -> Option<ProjectEntryId> {
+        self.nested.get(&entry_id).copied()
     }
 }
 
-/// Moves nested files right after their parent, dropping them when the parent is collapsed.
+/// Moves nested files right after their parent. A collapsed parent hides them and shows their git status combined
+/// with its own; revealing a nested file (`reveal_id`) expands its parent.
 /// `entries` must already be sorted in tree order; `expanded_ids` is the sorted expanded-entries list.
 pub(crate) fn apply(
     entries: &mut Vec<GitEntry>,
-    expanded_ids: &[ProjectEntryId],
+    mut expanded_ids: Option<&mut Vec<ProjectEntryId>>,
+    reveal_id: Option<ProjectEntryId>,
     excluded_id: ProjectEntryId,
     state: &mut NestingState,
 ) {
@@ -171,22 +177,48 @@ pub(crate) fn apply(
         if nested_indices.contains(&index) {
             continue;
         }
-        let Some(entry) = old_entries[index].take() else {
+        let Some(mut entry) = old_entries[index].take() else {
+            continue;
+        };
+        let Some(children) = children_of.get(&index) else {
+            entries.push(entry);
             continue;
         };
         let entry_id = entry.id;
-        entries.push(entry);
-        if let Some(children) = children_of.get(&index) {
-            state.parents.insert(entry_id);
-            let is_expanded = expanded_ids.binary_search(&entry_id).is_ok();
-            for &child_index in children {
-                if let Some(child) = old_entries[child_index].take()
-                    && is_expanded
-                {
-                    state.nested.insert(child.id);
-                    entries.push(child);
+        state.parents.insert(entry_id);
+        let reveals_child = reveal_id.is_some_and(|reveal_id| {
+            children.iter().any(|&child_index| {
+                old_entries[child_index]
+                    .as_ref()
+                    .is_some_and(|child| child.id == reveal_id)
+            })
+        });
+        let is_expanded = match expanded_ids.as_deref_mut() {
+            Some(expanded_ids) => match expanded_ids.binary_search(&entry_id) {
+                Ok(_) => true,
+                Err(position) if reveals_child => {
+                    expanded_ids.insert(position, entry_id);
+                    true
                 }
+                Err(_) => false,
+            },
+            None => false,
+        };
+        let children: Vec<GitEntry> = children
+            .iter()
+            .filter_map(|&child_index| old_entries[child_index].take())
+            .collect();
+        if is_expanded {
+            entries.push(entry);
+            for child in children {
+                state.nested.insert(child.id, entry_id);
+                entries.push(child);
             }
+        } else {
+            for child in &children {
+                entry.git_summary += child.git_summary;
+            }
+            entries.push(entry);
         }
     }
 }
