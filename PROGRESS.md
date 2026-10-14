@@ -42,8 +42,9 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
 - Default theme: user's custom **One Dark Pro Cursor** (dark mode), bundled as Bolt's default. No third-party credit
   for it (origin unknown, user's own work).
 - Default icon theme: **Material Icon Theme bundled natively** (no extension), copied from
-  `zed-extensions/material-icon-theme` (MIT — its license notice must ship). Refreshed by a `script/bolt-update-icons`
-  script, independent of upstream syncs.
+  `zed-extensions/material-icon-theme` (Apache-2.0, LICENSE shipped next to it). Rendered in color straight from the
+  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, independent of upstream syncs.
+- All Bolt work is committed directly on `main` (no feature branches).
 
 ## Open decisions (ask the user before acting)
 - none
@@ -58,7 +59,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
 | File nesting | `crates/bolt_file_nesting` (new) + hook in `project_panel` | antfu-style nesting rules |
 
 Branch model (proposal): `main` = Bolt, updated by **merging Zed stable tags** (`vX.Y.Z`) via a `sync/<tag>` branch,
-never rebased; feature branches `bolt/<feature>`. Full strategy + design rules: `notes/upstream-sync.md`.
+never rebased; Bolt work goes directly on `main`. Full strategy + design rules: `notes/upstream-sync.md`.
 
 ## Phases
 
@@ -69,7 +70,8 @@ never rebased; feature branches `bolt/<feature>`. Full strategy + design rules: 
 - ✅ First debug build (`cargo build`, ~10 min cold; `target/` ~15 GB). Smoke run isolated with
   `./target/debug/zed --user-data-dir /tmp/bolt-smoke` (never run dev builds without it until the rebrand: they would
   share `~/.config/zed` and Zed's data dir)
-- ⏳ Default theme One Dark Pro Cursor + native Material Icon Theme
+- ✅ Default theme One Dark Pro Cursor (dark mode) + native Material Icon Theme 1.3.2 in color (build + isolated run
+  OK, no theme/icon errors in log; visual check by the user pending)
 - ✅ Read upstream `.rules` (Rust guidelines: no `unwrap`, no `let _ =` on fallible ops, no `mod.rs`, `[lib] path`)
   and macOS build docs. Ignore its README "HARD RULE" banner: it is for upstream PRs, not Bolt
 - ⏳ Rebrand: app name, bundle ID, icon, data/config/log/socket paths (`paths` crate), CLI binary name
@@ -117,7 +119,16 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
 - Timeline / file history view, Outline in sidebar, … (add here when the user asks)
 
 ## Upstream touch points
-(List every upstream file modified, with the reason. Empty until P0.)
+Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new files) are not listed.
+| File | Change | Why |
+|---|---|---|
+| `assets/settings/default.json` | `theme` (mode dark, One Dark Pro Cursor), `icon_theme` (Material Icon Theme) | Bolt defaults |
+| `crates/theme/src/icon_theme.rs` | `BUNDLED_ICON_THEMES_DIR` const | shared by loader and `Icon` |
+| `crates/theme_settings/src/theme_settings.rs` | `load_bundled_icon_themes()` + call in `init` | load icon themes from embedded assets |
+| `crates/ui/src/components/icon.rs` | `IconSource::EmbeddedImage` + routing in `from_path` + render arm | embedded SVG is a single-color mask; theme icons go through `img()` for color |
+
+Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
+`script/bolt-update-icons`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
 
 ## Log
 - 2026-10-13: project defined; decisions recorded; no clone yet, no code.
@@ -126,4 +137,8 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
   User confirmed sync strategy, bundle ID, minimal scope, git panel replacement. Root `CLAUDE.md` removed.
   Cloned v1.23.3 (base commit 96a1b1b538), pushed to private `NicolaSpadari/bolt`, first debug build + isolated smoke
   run OK. Icon theme note: embedded SVGs render as single-color masks, so Material icons must be extracted to disk at
-  startup and loaded as external icons (like extensions do), from a `bolt_*` crate.
+  startup and loaded as external icons (like extensions do), from a `bolt_*` crate. → superseded: user asked for the
+  simple way; `img()` renders embedded SVGs in color, so theme icons are routed there (4 small upstream edits).
+  Theme + icons committed on `main` (ec783f4db1). Gotchas: the terminal has no Screen Recording permission
+  (`screencapture` shows only the wallpaper); dev builds still write logs to `~/Library/Logs/Zed/Zed.log` even with
+  `--user-data-dir` (fixed by the rebrand).
