@@ -114,11 +114,14 @@ Full checklist: `notes/vscode-scm-parity.md`. Summary:
 - ⛔ Commit graph (use Zed's)
 
 ### P2 — Search in sidebar
-- ⏳ Behavior spec from VS Code search view (`notes/` file to write at phase start)
-- ⏳ Panel with query/replace inputs, toggles (case, word, regex), include/exclude globs
-- ⏳ Results tree (file → matches with highlighted line preview), counts, collapse/expand all, list/tree
-- ⏳ Click → open editor at match (preview), replace one / file / all, dismiss result
-- ⏳ Keep Zed's multibuffer project search reachable (e.g. "open in editor" like VS Code's "Open in editor")
+- ✅ Spec: `notes/vscode-search-parity.md`
+- 🚧 `crates/bolt_search_panel` (new crate): left-dock panel (activity bar, between Explorer and Git), query with
+  Match Case / Whole Word / Regex, replace row (chevron, Replace All), include/exclude globs + ignore-files toggle
+  ("…"), "N results in M files", results grouped by file (icon, name, dir, count, collapsible), line preview with the
+  match highlighted and replace preview (strikethrough + new text), click = open at match (preview tab), double click
+  = pin, hover actions (replace / dismiss), Refresh / Clear / Collapse-Expand All, keyboard up/down/enter,
+  `cmd-shift-f` (seeded with the selection) / `cmd-shift-h`. Zed's multibuffer search still in the command palette.
+- ⏳ Query history, tree view, Open in Editor, live refresh on file changes.
 
 ### P3 — File nesting (antfu style)
 - ✅ Always on, no setting (user decision). Patterns: `crates/project_panel/src/bolt_nesting_patterns.jsonc` = antfu's
@@ -160,6 +163,11 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/zed/Cargo.toml` (rebrand) | `[[bin]] name = "bolt"`, `default-run`, bundle-dev/stable identifier/name, URL scheme `bolt` | binary must match `APP_NAME` (upstream guard in main.rs) |
 | `crates/zed/src/zed/app_menus.rs` (rebrand) | "Bolt" app menu, About/Hide/Quit Bolt | labels |
 | `crates/project_panel/src/project_panel.rs` | `mod bolt_nesting`, `State.bolt_nesting`, `bolt_nesting::apply` after sort, chevron + depth in `details_for_entry`, click toggles nest, ←/→ on nest parents | file nesting (logic in `bolt_nesting.rs`) |
+| `Cargo.toml` (+ `Cargo.lock`) | member + workspace dep `bolt_search_panel` | new crate |
+| `crates/zed/Cargo.toml`, `crates/zed/src/main.rs`, `crates/zed/src/zed.rs` | dep, `bolt_search_panel::init`, panel load/add in `initialize_panels` | search panel wiring |
+| `assets/keymaps/default-macos.json` | `cmd-shift-f` (Workspace + Pane) → `bolt_search::FocusSearch`, `cmd-shift-h` → `bolt_search::ToggleReplace` | VS Code shortcuts |
+| `crates/title_bar/src/title_bar.rs` (2) | project name back in title bar (branch only in status bar), project name `Color::Muted` | user request |
+| `assets/settings/default.json` (2) | `title_bar.show_user_menu: true` again (no account items without sign-in) | user request |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -183,3 +191,4 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-14: file nesting (P3) done. `cargo test -p project_panel`: 137 pass, 2 pixel/mouse layout tests fail
   (`test_collapse_selected_entry_does_not_scroll_visible_parent`, `test_focus_follows_mouse_into_blank_area`), also
   without nesting → caused by earlier Bolt layout changes (activity bar / left docks), to look at later.
+- 2026-10-14: sidebar search v1 (P2); title bar tweaks (user menu back, project name in title + status bar).

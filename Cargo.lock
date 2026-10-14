@@ -2356,6 +2356,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "bolt_search_panel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "collections",
+ "editor",
+ "file_icons",
+ "futures 0.3.34",
+ "gpui",
+ "language",
+ "menu",
+ "project",
+ "theme",
+ "ui",
+ "util",
+ "workspace",
+]
+
+[[package]]
 name = "bon"
 version = "3.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22799,6 +22818,7 @@ dependencies = [
  "audio",
  "auto_update",
  "auto_update_ui",
+ "bolt_search_panel",
  "breadcrumbs",
  "call",
  "call_hierarchy",
