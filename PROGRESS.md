@@ -143,6 +143,14 @@ file is upstream's hottest (46 commits / 3 months).
 - ⏳ Diagnostics (errors/warnings) of nested files are not yet combined on a collapsed parent.
 
 ### Backlog (on request)
+- ⏳ **Next session — SCM panel** (user request 2026-10-14):
+  - After a commit, the Commit button becomes **Push** / **Sync Changes ↑n ↓m** when the branch is ahead/behind
+    (VS Code). Today pushing works only from the terminal: also check why the "…" → Push entry doesn't work for the
+    user (it dispatches `git::Push`, routed through Zed's hidden GitPanel).
+  - After **Merge Branch…** (`git merge --no-commit --no-ff`), prefill the commit message like VS Code
+    (`Merge branch '<branch>' into <current>` / `Merge remote-tracking branch 'origin/main' into …`; git writes it to
+    `.git/MERGE_MSG`).
+  - Commit message input: the placeholder must truncate with an ellipsis instead of being clipped.
 - ⏳ Merge panel: VS Code-style merge conflict editor (incoming / current / result, accept current / incoming / both),
   tied to the Merge Changes section of the source control panel (user request 2026-10-14; details later).
 - ⏳ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
