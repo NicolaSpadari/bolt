@@ -1154,6 +1154,14 @@ impl EditorElement {
             let mut cursors = Vec::new();
             let mut handled_animation_cursors = HashSet::default();
             let mut request_animation_frame = false;
+            // BOLT: blink fade of the local cursors (VS Code smooth blinking).
+            let (blink_opacity, blink_fading) =
+                if editor.read_only(cx) || cx.reduce_motion() {
+                    (1., false)
+                } else {
+                    let blink_manager = editor.blink_manager.read(cx);
+                    (blink_manager.opacity(), blink_manager.fading())
+                };
 
             let show_local_cursors = editor.show_local_cursors(window, cx);
             let animation_settings = EditorSettings::get_global(cx).cursor_animation;
@@ -1319,7 +1327,11 @@ impl EditorElement {
                     }
 
                     let mut cursor = CursorLayout {
-                        color: player_color.cursor,
+                        color: if selection.is_local {
+                            player_color.cursor.opacity(blink_opacity)
+                        } else {
+                            player_color.cursor
+                        },
                         block_width,
                         origin: point(x, y),
                         line_height,
@@ -1368,6 +1380,9 @@ impl EditorElement {
                 if request_animation_frame {
                     window.request_animation_frame();
                 }
+            }
+            if blink_fading {
+                window.request_animation_frame();
             }
 
             cursors

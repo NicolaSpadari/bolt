@@ -49,12 +49,13 @@
   ":"
   (class_name) @selector.pseudo)
 
+; BOLT: `.css` suffixes so themes can color CSS like VS Code (fall back to @property / @function).
 [
   (feature_name)
   (property_name)
-] @property
+] @property.css
 
-(function_name) @function
+(function_name) @function.css
 
 [
   (plain_value)

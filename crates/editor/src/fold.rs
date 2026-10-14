@@ -825,6 +825,9 @@ impl Editor {
         };
         let inmemory_folds = display_snapshot
             .folds_in_range(MultiBufferOffset(0)..display_snapshot.buffer_snapshot().len())
+            // BOLT: type-tagged folds are created by code (e.g. Iconify previews), not by the user: don't persist
+            // them, or they come back on reopen as plain "⋯" folds.
+            .filter(|fold| fold.placeholder.type_tag.is_none())
             .map(|fold| {
                 let start = fold.range.start.text_anchor_in(buffer_snapshot);
                 let end = fold.range.end.text_anchor_in(buffer_snapshot);

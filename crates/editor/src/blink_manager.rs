@@ -1,6 +1,9 @@
 use gpui::Context;
 use settings::SettingsStore;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+// BOLT: cursor fade in/out while blinking, like VS Code's smooth caret blinking.
+const BLINK_FADE: Duration = Duration::from_millis(200);
 use ui::App;
 
 pub struct BlinkManager {
@@ -10,6 +13,8 @@ pub struct BlinkManager {
     blinking_paused: bool,
     /// Whether the cursor should be visibly rendered or not.
     visible: bool,
+    // BOLT: when the blink last toggled `visible`, to fade between the two states.
+    visibility_changed_at: Option<Instant>,
     /// Whether the blinking is currently enabled.
     enabled: bool,
     /// Whether the blinking is enabled in the settings.
@@ -33,6 +38,7 @@ impl BlinkManager {
             blink_epoch: 0,
             blinking_paused: false,
             visible: true,
+            visibility_changed_at: None,
             enabled: false,
             blink_enabled_in_settings,
         }
@@ -66,6 +72,7 @@ impl BlinkManager {
         if (self.blink_enabled_in_settings)(cx) {
             if epoch == self.blink_epoch && self.enabled && !self.blinking_paused {
                 self.visible = !self.visible;
+                self.visibility_changed_at = Some(Instant::now());
                 cx.notify();
 
                 let epoch = self.next_blink_epoch();
@@ -88,6 +95,7 @@ impl BlinkManager {
             self.visible = true;
             cx.notify();
         }
+        self.visibility_changed_at = None;
     }
 
     /// Enable the blinking of the cursor.
@@ -106,11 +114,29 @@ impl BlinkManager {
     /// Disable the blinking of the cursor.
     pub fn disable(&mut self, _cx: &mut Context<Self>) {
         self.visible = false;
+        self.visibility_changed_at = None;
         self.enabled = false;
     }
 
     pub fn visible(&self) -> bool {
         self.visible
+    }
+
+    /// BOLT: cursor opacity, easing between hidden and visible for `BLINK_FADE` after each blink.
+    pub fn opacity(&self) -> f32 {
+        let target = if self.visible { 1. } else { 0. };
+        let Some(changed_at) = self.visibility_changed_at else {
+            return target;
+        };
+        let progress = (changed_at.elapsed().as_secs_f32() / BLINK_FADE.as_secs_f32()).min(1.);
+        let eased = progress * progress * (3. - 2. * progress);
+        if self.visible { eased } else { 1. - eased }
+    }
+
+    /// BOLT: whether the cursor is between the two blink states.
+    pub fn fading(&self) -> bool {
+        self.visibility_changed_at
+            .is_some_and(|changed_at| changed_at.elapsed() < BLINK_FADE)
     }
 
     #[cfg(test)]

@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Regenerates the syntax colors of Bolt's theme from a VS Code color theme.
+
+Every Zed highlight capture is mapped to the TextMate scope stack VS Code's grammars produce for the same token, and
+the VS Code theme's `tokenColors` are resolved with TextMate's selector rules (deepest scope, then most specific
+selector, then last rule wins). UI colors and non-syntax keys of the Bolt theme are left untouched.
+
+Usage: script/bolt-theme-from-vscode [path/to/vscode-theme.json]
+Default source: One Dark Pro installed in Cursor or VS Code.
+"""
+
+import glob
+import json
+import os
+import re
+import sys
+
+BOLT_THEME = os.path.join(
+    os.path.dirname(__file__), "..", "assets", "themes", "one_dark_pro_cursor", "one_dark_pro_cursor.json"
+)
+DEFAULT_SOURCES = [
+    "~/.cursor/extensions/zhuangtongfa.material-theme-*/themes/OneDark-Pro.json",
+    "~/.vscode/extensions/zhuangtongfa.material-theme-*/themes/OneDark-Pro.json",
+]
+
+# Zed capture -> TextMate scope stack (outermost first) of the equivalent VS Code token.
+# Language-suffixed captures (`.css`, `.jsx`, `.template`, …) exist where VS Code colors the same Zed category
+# differently per language; other themes fall back to the unsuffixed key.
+CAPTURES = {
+    "attribute": ["text.html.vue", "meta.tag", "entity.other.attribute-name.html"],
+    "attribute.jsx": ["source.tsx", "meta.tag.tsx", "entity.other.attribute-name.tsx"],
+    "boolean": ["source.ts", "constant.language.boolean.true.ts"],
+    "comment": ["source.ts", "comment.line.double-slash.ts"],
+    "comment.doc": ["source.ts", "comment.block.documentation.ts"],
+    "constant": ["source.ts", "variable.other.constant.ts"],
+    "constant.builtin": ["source.ts", "constant.language.null.ts"],
+    "constructor": ["source.ts", "meta.method.declaration.ts", "storage.type.ts"],
+    "embedded": ["source.ts", "meta.embedded.line.ts"],
+    "emphasis": ["text.html.markdown", "markup.italic.markdown"],
+    "emphasis.strong": ["text.html.markdown", "markup.bold.markdown"],
+    "enum": ["source.ts", "entity.name.type.enum.ts"],
+    "function": ["source.ts", "meta.function-call.ts", "entity.name.function.ts"],
+    "function.builtin": ["source.ts", "support.function.ts"],
+    "function.css": ["source.css", "meta.property-value.css", "support.function.misc.css"],
+    "function.decorator": ["source.ts", "meta.decorator.ts", "entity.name.function.ts"],
+    "function.macro": ["source.rust", "entity.name.function.macro.rust"],
+    "function.method": ["source.ts", "meta.function-call.ts", "entity.name.function.ts"],
+    "keyword": ["source.ts", "storage.type.ts"],
+    "keyword.control": ["source.ts", "keyword.control.flow.ts"],
+    "keyword.directive": ["text.html.vue", "meta.attribute.directive.vue", "entity.other.attribute-name.html.vue"],
+    "keyword.import": ["source.ts", "keyword.control.import.ts"],
+    "keyword.jsdoc": ["source.ts", "comment.block.documentation.ts", "storage.type.class.jsdoc"],
+    "keyword.operator": ["source.ts", "keyword.operator.expression.typeof.ts"],
+    "label": ["source.ts", "entity.name.label.ts"],
+    "link_text": ["text.html.markdown", "string.other.link.title.markdown"],
+    "link_uri": ["text.html.markdown", "markup.underline.link.markdown"],
+    "namespace": ["source.ts", "entity.name.type.module.ts"],
+    "number": ["source.ts", "constant.numeric.decimal.ts"],
+    "operator": ["source.ts", "keyword.operator.assignment.ts"],
+    "operator.arrow": ["source.ts", "meta.arrow.ts", "storage.type.function.arrow.ts"],
+    "preproc": ["source.c", "meta.preprocessor.c"],
+    "property": ["source.ts", "meta.property.object.ts", "variable.other.property.ts"],
+    "property.css": ["source.css", "meta.property-name.css", "support.type.property-name.css"],
+    "property.json_key": ["source.json", "meta.structure.dictionary.json", "support.type.property-name.json"],
+    "property.readonly": ["source.ts", "variable.other.constant.property.ts"],
+    "punctuation": ["source.ts", "meta.brace.round.ts"],
+    "punctuation.bracket": ["source.ts", "meta.brace.round.ts"],
+    "punctuation.bracket.html": ["text.html.vue", "meta.tag", "punctuation.definition.tag.begin.html"],
+    "punctuation.bracket.jsx": ["source.tsx", "meta.tag.tsx", "punctuation.definition.tag.begin.tsx"],
+    "punctuation.delimiter": ["source.ts", "punctuation.separator.comma.ts"],
+    "punctuation.delimiter.html": ["text.html.vue", "meta.tag", "punctuation.separator.key-value.html"],
+    "punctuation.delimiter.jsx": ["source.tsx", "meta.tag.tsx", "keyword.operator.assignment.tsx"],
+    "punctuation.list_marker": ["text.html.markdown", "markup.list.unnumbered.markdown",
+                                "punctuation.definition.list.begin.markdown"],
+    "punctuation.markup": ["text.html.markdown", "markup.heading.markdown", "punctuation.definition.heading.markdown"],
+    # Vue `{{ }}` interpolation delimiters.
+    "punctuation.special": ["text.html.vue", "punctuation.definition.interpolation.begin.html.vue"],
+    "punctuation.special.template": ["source.ts", "meta.template.expression.ts",
+                                     "punctuation.definition.template-expression.begin.ts"],
+    "selector": ["source.css", "meta.selector.css", "entity.other.attribute-name.class.css"],
+    "selector.class": ["source.css", "meta.selector.css", "entity.other.attribute-name.class.css"],
+    "selector.id": ["source.css", "meta.selector.css", "entity.other.attribute-name.id.css"],
+    "selector.pseudo": ["source.css", "meta.selector.css", "entity.other.attribute-name.pseudo-class.css"],
+    "string": ["source.ts", "string.quoted.double.ts"],
+    "string.escape": ["source.ts", "string.quoted.double.ts", "constant.character.escape.ts"],
+    "string.regex": ["source.ts", "string.regexp.ts"],
+    "string.special": ["text.html.vue", "constant.character.entity.named.bull.html"],
+    "string.special.symbol": ["source.ruby", "constant.language.symbol.ruby"],
+    "tag": ["text.html.vue", "meta.tag", "entity.name.tag.html"],
+    "tag.component.jsx": ["source.tsx", "meta.tag.tsx", "support.class.component.tsx"],
+    "tag.doctype": ["text.html.basic", "meta.tag.metadata.doctype.html", "entity.name.tag.html"],
+    "tag.jsx": ["source.tsx", "meta.tag.tsx", "entity.name.tag.tsx"],
+    "text.jsx": ["source.tsx", "meta.jsx.children.tsx"],
+    "text.literal": ["text.html.markdown", "markup.inline.raw.string.markdown"],
+    "title": ["text.html.markdown", "markup.heading.markdown", "entity.name.section.markdown"],
+    "type": ["source.ts", "meta.type.annotation.ts", "entity.name.type.ts"],
+    "type.builtin": ["source.ts", "meta.type.annotation.ts", "support.type.primitive.ts"],
+    "type.class": ["source.ts", "entity.name.type.class.ts"],
+    "type.enum.member": ["source.ts", "variable.other.enummember.ts"],
+    "type.jsdoc": ["source.ts", "comment.block.documentation.ts", "entity.name.type.instance.jsdoc"],
+    "type.parameter": ["source.ts", "meta.type.parameters.ts", "entity.name.type.ts"],
+    "type.unit": ["source.css", "meta.property-value.css", "keyword.other.unit.px.css"],
+    "variable": ["source.ts", "variable.other.readwrite.ts"],
+    "variable.builtin": ["source.ts", "support.variable.ts"],
+    "variable.constant": ["source.ts", "variable.other.constant.ts"],
+    "variable.jsdoc": ["source.ts", "comment.block.documentation.ts", "variable.other.jsdoc"],
+    "variable.parameter": ["source.ts", "variable.parameter.ts"],
+    "variable.special": ["source.ts", "variable.language.this.ts"],
+    "variant": ["source.ts", "variable.other.enummember.ts"],
+}
+
+# VS Code semantic token colors that override the TextMate result (theme `semanticTokenColors`).
+SEMANTIC_OVERRIDES = {
+    "variable.builtin": "variable.defaultLibrary",
+    "variable.constant": "variable.constant",
+    "type.enum.member": "enumMember",
+    "variant": "enumMember",
+    "function.macro": "macro",
+}
+
+
+def find_source():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
+    for pattern in DEFAULT_SOURCES:
+        matches = sorted(glob.glob(os.path.expanduser(pattern)))
+        if matches:
+            return matches[-1]
+    sys.exit("No VS Code One Dark Pro theme found; pass the theme JSON path.")
+
+
+def parse_rules(theme):
+    rules = []
+    for index, token in enumerate(theme.get("tokenColors", [])):
+        scopes = token.get("scope")
+        if scopes is None:
+            continue
+        if isinstance(scopes, str):
+            scopes = scopes.split(",")
+        for selector in scopes:
+            selector = selector.strip()
+            if selector and " - " not in selector:
+                rules.append((selector.split(), token.get("settings", {}), index))
+    return rules
+
+
+def scope_matches(selector_part, scope):
+    return scope == selector_part or scope.startswith(selector_part + ".")
+
+
+def selector_score(parts, stack):
+    """TextMate ranking: depth of the scope matched by the last selector part, its specificity, then parents."""
+    for depth in range(len(stack) - 1, -1, -1):
+        if not scope_matches(parts[-1], stack[depth]):
+            continue
+        position = depth - 1
+        parents = []
+        for part in reversed(parts[:-1]):
+            while position >= 0 and not scope_matches(part, stack[position]):
+                position -= 1
+            if position < 0:
+                return None
+            parents.append((position, part.count(".") + 1))
+            position -= 1
+        return ((depth, parts[-1].count(".") + 1), tuple(parents))
+    return None
+
+
+def resolve(rules, stack, key):
+    best = None
+    for parts, settings, index in rules:
+        if key not in settings:
+            continue
+        score = selector_score(parts, stack)
+        if score is None:
+            continue
+        candidate = (score, index)
+        if best is None or candidate > best[0]:
+            best = (candidate, settings[key])
+    return best[1] if best else None
+
+
+def main():
+    source_path = find_source()
+    with open(source_path) as source_file:
+        source = json.load(source_file)
+    rules = parse_rules(source)
+    default_foreground = source.get("colors", {}).get("editor.foreground", "#abb2bf")
+    semantic_colors = source.get("semanticTokenColors", {})
+
+    with open(BOLT_THEME) as theme_file:
+        bolt = json.load(theme_file)
+
+    for theme in bolt["themes"]:
+        syntax = theme["style"].setdefault("syntax", {})
+        for capture, stack in CAPTURES.items():
+            color = resolve(rules, stack, "foreground") or default_foreground
+            semantic = semantic_colors.get(SEMANTIC_OVERRIDES.get(capture, ""))
+            if isinstance(semantic, dict):
+                color = semantic.get("foreground", color)
+            elif isinstance(semantic, str):
+                color = semantic
+            font_style = resolve(rules, stack, "fontStyle") or ""
+            style = syntax.get(capture, {})
+            style["color"] = color.lower()
+            # Markdown bold/italic come from VS Code's renderer, not the theme: keep the Bolt theme's own styles.
+            if "italic" in font_style:
+                style["font_style"] = "italic"
+            if "bold" in font_style:
+                style["font_weight"] = 700
+            syntax[capture] = style
+
+    text = json.dumps(bolt, indent="\t", ensure_ascii=False)
+    # Keep the theme's compact `{ "color": "…" }` style for color-only entries.
+    text = re.sub(r'\{\n\t+("color": "[^"]*")\n\t+\}', r"{ \1 }", text)
+    with open(BOLT_THEME, "w") as theme_file:
+        theme_file.write(text + "\n")
+    print(f"Updated {len(CAPTURES)} syntax styles from {source_path}")
+
+
+if __name__ == "__main__":
+    main()

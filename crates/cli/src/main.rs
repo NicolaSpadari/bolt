@@ -48,7 +48,7 @@ trait InstalledApp {
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "zed",
+    name = "bolt", // BOLT
     disable_version_flag = true,
     before_help = "The Zed CLI binary.
 This CLI is a separate binary that invokes Zed.

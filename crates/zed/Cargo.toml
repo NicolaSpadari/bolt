@@ -177,6 +177,7 @@ outline_panel.workspace = true
 bolt_search_panel.workspace = true
 # BOLT: VS Code-style source control panel.
 bolt_scm.workspace = true
+bolt_iconify.workspace = true
 parking_lot.workspace = true
 paths.workspace = true
 picker.workspace = true

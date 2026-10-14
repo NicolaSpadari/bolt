@@ -46,7 +46,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
   for it (origin unknown, user's own work).
 - Default icon theme: **Material Icon Theme bundled natively** (no extension), copied from
   `zed-extensions/material-icon-theme` (Apache-2.0, LICENSE shipped next to it). Rendered in color straight from the
-  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `crates/bolt_scm/`, `assets/icons/bolt/git_merge.svg` (Lucide, ISC), `script/bolt-update-file-nesting`, `crates/project_panel/src/bolt_nesting*` (code, antfu block verbatim `.jsonc`, MIT LICENSE), `script/bolt-generate-icons.swift`, `crates/zed/resources/bolt-icon.*`, app-icon PNGs (replaced), independent of upstream syncs.
+  embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `crates/bolt_scm/`, `assets/icons/bolt/git_merge.svg` (Lucide, ISC), `script/bolt-update-file-nesting`, `crates/project_panel/src/bolt_nesting*` (code, antfu block verbatim `.jsonc`, MIT LICENSE), `script/bolt-generate-icons.swift` (gradient tile since 2026-10-14), `crates/zed/resources/bolt-icon.*`, `crates/bolt_iconify/`, `script/bolt-theme-from-vscode`, app-icon PNGs (replaced), independent of upstream syncs.
 - All Bolt work is committed directly on `main` (no feature branches).
 
 ## Open decisions (ask the user before acting)
@@ -190,6 +190,18 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/editor/src/editor.rs`, `crates/editor/src/element.rs` | `ConflictsOuter` row highlights mark scrollbar markers dirty; full-width conflict markers (`version_control_conflict`) in singleton editors | merge conflicts visible in the scrollbar |
 | `crates/git_ui/src/conflict_view.rs` | conflict buttons: Accept Current Change / Accept Incoming Change / Accept Both Changes | VS Code wording |
 | `README.md` | rewritten for Bolt (on sync: keep ours) | user request |
+| `crates/grammars/src/{typescript,javascript,tsx,css}/highlights.scm` | capture suffixes: `operator.arrow` (`=>`), `punctuation.special.template` (`${ }`), `property.css`, `function.css` (fall back to the unsuffixed capture) | VS Code-identical colors |
+| `assets/settings/default.json` (colors) | `semantic_tokens: combined`; `global_lsp_settings.semantic_token_rules` (readonly/constant/defaultLibrary like VS Code); `diff_view_style: unified` | VS Code-identical colors; user preference |
+| `crates/settings_content/src/extension.rs`, `crates/extension_host/src/extension_settings.rs`, `crates/extensions_ui/src/extension_suggestions.rs`, `assets/settings/default.json` | `suggest_extensions` (default false) | no "Emmet is available" popups |
+| `crates/settings_content/src/editor.rs`, `crates/settings/src/vscode_import.rs`, `assets/settings/default.json` | `iconify` setting (default true) | `bolt_iconify` |
+| `crates/editor/src/inlays.rs`, `crates/editor/src/display_map/inlay_map.rs` | `InlayContent::Image` + `Inlay::image` (rendered like color inlays) | Iconify icon before the name on the cursor row |
+| `crates/editor/src/display_map.rs` | `HighlightKey::BoltIconify` | dimmed icon names |
+| `crates/editor/src/fold.rs` | type-tagged (code-created) folds are not persisted | Iconify folds came back as "⋯" |
+| `crates/editor/src/blink_manager.rs`, `crates/editor/src/editor.rs`, `crates/editor/src/element.rs` | 200 ms cursor fade on blink (off with Reduce Motion) | VS Code smooth caret blinking |
+| `crates/project_panel/src/project_panel.rs` (indent guides) | nested files add one level to the guides too | file nesting tree lines |
+| `assets/settings/default.json` (UI) | `ui_font_family: .SystemUIFont`; `project_panel.folder_indicator: both`, `hide_root: true` | like VS Code/Cursor |
+| `crates/install_cli/src/install_cli_binary.rs`, `crates/cli/src/main.rs` | CLI installed as `/usr/local/bin/bolt` (never replaces Zed's `zed`), clap name `bolt` | `bolt ./folder` |
+| `crates/zed/src/main.rs`, `Cargo.toml`, `crates/zed/Cargo.toml` | `bolt_iconify` crate wiring | Iconify |
 | `crates/git_ui/src/git_ui.rs` | `pub fn bolt_panel_enabled` | read the switch from bolt_scm |
 | `crates/git_ui/src/git_panel.rs` | `GitStatusEntry::bolt_new`; `icon()` hidden when `bolt_panel` | single-file diff from bolt_scm; Zed panel stays loaded (its workspace git actions need it) but buttonless |
 | `assets/keymaps/default-macos.json` (scm) | `ctrl-shift-g` → `bolt_scm::ToggleFocus`; `BoltScmCommit > Editor`: enter / cmd-enter → `bolt_scm::Commit` | shortcuts |
@@ -232,3 +244,8 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   plain editor (Zed's Use HEAD / Use <branch> / Use Both).
 - 2026-10-14: conflicts in the scrollbar + VS Code conflict wording; resolved conflicts move to Staged once added
   (Merge section = still conflicted only); header ✓ removed; commit input in UI font 13px.
+- 2026-10-14: theme syntax regenerated from One Dark Pro 3.20.3 with `script/bolt-theme-from-vscode` (TextMate resolver, 77 keys); semantic tokens on; extension suggestions off; user settings merged into defaults (user file reset, backup `~/.config/bolt/settings.json.bak-2026-10-14`).
+- 2026-10-14: `bolt_iconify` (inline Iconify icons from node_modules, icon + dimmed name on the cursor row); cursor blink fade;
+  system UI font; project panel chevron + folder icon (Zed's `both`), root hidden, nesting tree lines; CLI as `bolt`;
+  app icon with a soft gradient. Semantic tokens: if colors stay tree-sitter-only after startup (no "semantic token"
+  entries in `dev: open highlights tree view`), it is the startup race noted above — edit the file to refresh.

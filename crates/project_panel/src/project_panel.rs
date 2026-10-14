@@ -7580,6 +7580,8 @@ impl Render for ProjectPanel {
                                         |this, range, window, cx| {
                                             let mut items =
                                                 SmallVec::with_capacity(range.end - range.start);
+                                            // BOLT: nested files are one level deeper, guides included.
+                                            let nesting = &this.state.bolt_nesting;
                                             this.iter_visible_entries(
                                                 range,
                                                 window,
@@ -7589,7 +7591,12 @@ impl Render for ProjectPanel {
                                                         Self::calculate_depth_and_difference(
                                                             entry, entries,
                                                         );
-                                                    items.push(depth);
+                                                    items.push(
+                                                        depth
+                                                            + usize::from(
+                                                                nesting.is_nested(entry.id),
+                                                            ),
+                                                    );
                                                 },
                                             );
                                             items

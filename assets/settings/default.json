@@ -57,7 +57,7 @@
   // You can set this to ".SystemUIFont" to use the system font
   // ".ZedSans" currently aliases to "IBM Plex Sans", but this may
   // change in the future
-  "ui_font_family": ".ZedSans",
+  "ui_font_family": ".SystemUIFont",  // BOLT: macOS system font, like VS Code/Cursor
   // Set the UI's font fallbacks, this will be merged with the platform's
   // default font fallbacks.
   "ui_font_fallbacks": null,
@@ -407,7 +407,7 @@
   // How to display diffs in the editor.
   //
   // Default: split
-  "diff_view_style": "split",
+  "diff_view_style": "unified",  // BOLT: user preference
   // The minimum width (in em-widths) at which the split diff view is used.
   // When the editor is narrower than this, the diff view automatically
   // switches to unified mode and switches back when the editor is wide
@@ -893,7 +893,7 @@
     //   "chevron"
     // 3. A disclosure chevron followed by a folder icon:
     //   "both"
-    "folder_indicator": "icon",
+    "folder_indicator": "both",  // BOLT: chevron + folder icon, chevron hanging in the indent
     // Whether to show the git status in the project panel.
     "git_status": true,
     // Amount of indentation for nested items.
@@ -985,7 +985,7 @@
     "drag_and_drop": true,
     // Whether to hide the root entry when only one folder is open in the window;
     // this also affects how file paths appear in the file finder history.
-    "hide_root": false,
+    "hide_root": true,  // BOLT: no root folder row
     // Whether to hide the hidden entries in the project panel.
     "hide_hidden": false,
     // Settings for automatically opening files.
@@ -1428,7 +1428,8 @@
   // - "full": Use LSP semantic tokens exclusively to highlight the text, tree-sitter syntax highlighting is off.
   //
   // May require language server restart to properly apply.
-  "semantic_tokens": "off",
+  // BOLT: VS Code colors TS/Vue with semantic tokens on top of TextMate; same here.
+  "semantic_tokens": "combined",
 
   // Controls whether folding ranges from language servers are used instead of
   // tree-sitter and indent-based folding.
@@ -2347,6 +2348,11 @@
   "auto_install_extensions": {
     "html": true,
   },
+  // BOLT: show "install extension" suggestions (e.g. "Emmet is available for this file") for opened files.
+  "suggest_extensions": false,
+  // BOLT: show Iconify icon names (`ph:bed`, `i-lucide-check`) as the icon itself, like antfu's Iconify IntelliSense.
+  // Icons come from the project's node_modules (`@iconify-json/*`, `@iconify/json`).
+  "iconify": true,
   // The capabilities granted to extensions.
   //
   // This list can be customized to restrict what extensions are able to do.
@@ -2815,7 +2821,29 @@
     // ]
     //
     // Default rules are viewable via the "zed: show default semantic token rules" action.
-    "semantic_token_rules": [],
+    // BOLT: VS Code's semantic token fallbacks that Zed's defaults lack (e.g. `const` is `readonly` → constant color).
+    "semantic_token_rules": [
+      {
+        "token_type": "variable",
+        "token_modifiers": ["readonly", "defaultLibrary"],
+        "style": ["variable.builtin"],
+      },
+      {
+        "token_type": "variable",
+        "token_modifiers": ["readonly"],
+        "style": ["constant"],
+      },
+      {
+        "token_type": "variable",
+        "token_modifiers": ["constant"],
+        "style": ["variable.constant", "constant"],
+      },
+      {
+        "token_type": "property",
+        "token_modifiers": ["readonly"],
+        "style": ["property.readonly", "property"],
+      },
+    ],
   },
   // Jupyter settings
   "jupyter": {

@@ -17,7 +17,12 @@ Based on Zed **v1.23.3**. macOS (Apple Silicon) only.
 - **Sidebar search**: VS Code-style search and replace panel with live results.
 - **File nesting** in the project panel (antfu's patterns).
 - **Footer**: project name, branch and repository button.
-- **Theme and icons**: One Dark Pro and Material Icon Theme by default.
+- **Iconify previews**: icon names such as `ph:bed` or `i-lucide-check` show as the icon itself, read from the
+  project's `node_modules` (setting `iconify`).
+- **Theme and icons**: One Dark Pro (syntax colors generated from the VS Code theme with
+  `script/bolt-theme-from-vscode`, LSP semantic tokens on) and Material Icon Theme by default; macOS system UI font.
+- **Editor details**: VS Code-style smooth cursor blinking, VS Code wording for merge conflicts, no extension
+  suggestion popups.
 - **Minimal**: no AI, edit predictions, collaboration, sign-in, telemetry, auto-update, debugger, remote development
   or REPL.
 - **Isolated** from an installed Zed: own bundle ID (`com.spadari.bolt`), config in `~/.config/bolt`, data in
@@ -30,6 +35,8 @@ Requirements: Rust (see `rust-toolchain.toml`), Xcode with the Metal toolchain
 
 - Development: `cargo build`, then `./target/debug/bolt <path>`. About 10 min from scratch, seconds afterwards.
 - Release app: `script/bolt-bundle-mac` builds `target/release/Bolt.app`. About 30–40 min from scratch.
+- Command line: `bolt <path>` after "Install CLI" from the command palette (links `/usr/local/bin/bolt`, never touches
+  Zed's `zed`).
 
 More on building Zed: [macOS](./docs/src/development/macos.md).
 

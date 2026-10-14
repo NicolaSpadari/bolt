@@ -16,6 +16,8 @@ pub struct ExtensionSettings {
     pub auto_install_extensions: HashMap<Arc<str>, bool>,
     pub auto_update_extensions: HashMap<Arc<str>, bool>,
     pub granted_capabilities: Vec<ExtensionCapability>,
+    // BOLT: extension suggestion popups (`suggest_extensions`).
+    pub suggest_extensions: bool,
 }
 
 impl ExtensionSettings {
@@ -40,6 +42,7 @@ impl Settings for ExtensionSettings {
         Self {
             auto_install_extensions: content.extension.auto_install_extensions.clone(),
             auto_update_extensions: content.extension.auto_update_extensions.clone(),
+            suggest_extensions: content.extension.suggest_extensions.unwrap_or(false),
             granted_capabilities: content
                 .extension
                 .granted_extension_capabilities

@@ -160,6 +160,7 @@ members = [
     "crates/outline_panel",
     "crates/bolt_search_panel",
     "crates/bolt_scm",
+    "crates/bolt_iconify",
     "crates/path",
     "crates/paths",
     "crates/picker",
@@ -433,6 +434,7 @@ outline = { path = "crates/outline" }
 outline_panel = { path = "crates/outline_panel" }
 bolt_search_panel = { path = "crates/bolt_search_panel" }
 bolt_scm = { path = "crates/bolt_scm" }
+bolt_iconify = { path = "crates/bolt_iconify" }
 path = { path = "crates/path" }
 paths = { path = "crates/paths" }
 perf = { path = "tooling/perf" }

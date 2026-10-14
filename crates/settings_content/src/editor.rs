@@ -17,6 +17,10 @@ pub struct EditorSettingsContent {
     ///
     /// Default: true
     pub cursor_blink: Option<bool>,
+    /// BOLT: replace Iconify icon names (`ph:bed`, `i-lucide-check`) with the icon itself.
+    ///
+    /// Default: true
+    pub iconify: Option<bool>,
     /// Cursor shape for the default editor.
     /// Can be "bar", "block", "underline", or "hollow".
     ///

@@ -399,6 +399,22 @@ impl<'a> Iterator for InlayChunks<'a> {
                                 constrain_width: false,
                                 measured_width: None,
                             });
+                        } else if let InlayContent::Image(image) = &inlay.content {
+                            // BOLT: image inlays (Iconify icon previews).
+                            let image = image.clone();
+                            renderer = Some(ChunkRenderer {
+                                id: ChunkRendererId::Inlay(inlay.id),
+                                render: Arc::new(move |_| {
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .pr_0p5()
+                                        .child(gpui::img(image.clone()).size_3p5())
+                                        .into_any_element()
+                                }),
+                                constrain_width: false,
+                                measured_width: None,
+                            });
                         }
                         self.highlight_styles.inlay_hint
                     }

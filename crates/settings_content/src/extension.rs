@@ -18,6 +18,10 @@ pub struct ExtensionSettingsContent {
     pub auto_install_extensions: HashMap<Arc<str>, bool>,
     #[serde(default)]
     pub auto_update_extensions: HashMap<Arc<str>, bool>,
+    /// BOLT: whether to show "install extension" suggestions for opened files.
+    ///
+    /// Default: false
+    pub suggest_extensions: Option<bool>,
     /// The capabilities granted to extensions.
     pub granted_extension_capabilities: Option<Vec<ExtensionCapabilityContent>>,
 }

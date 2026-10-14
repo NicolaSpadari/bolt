@@ -166,6 +166,8 @@ pub enum HighlightKey {
     ColorizeBracket(usize),
     SemanticToken(u32),
     // below is sorted lexicographically, as there is no relevant ordering for these aside from coming after the above
+    // BOLT: dimmed Iconify icon names on the cursor row.
+    BoltIconify,
     BufferSearchHighlights,
     ConsoleAnsiHighlight(usize),
     DebugStackFrameLine,

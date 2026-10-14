@@ -242,7 +242,6 @@
   "!"
   "!="
   "!=="
-  "=>"
   ">"
   ">="
   ">>"
@@ -264,6 +263,9 @@
   "??="
   "..."
 ] @operator
+
+; BOLT: own capture so themes can color arrows like VS Code (falls back to @operator).
+"=>" @operator.arrow
 
 (regex
   "/" @string.regex)
@@ -359,12 +361,12 @@
   "default" @keyword.control)
 
 (template_substitution
-  "${" @punctuation.special
-  "}" @punctuation.special) @embedded
+  "${" @punctuation.special.template
+  "}" @punctuation.special.template) @embedded
 
 (template_type
-  "${" @punctuation.special
-  "}" @punctuation.special) @embedded
+  "${" @punctuation.special.template
+  "}" @punctuation.special.template) @embedded
 
 (type_arguments
   "<" @punctuation.bracket

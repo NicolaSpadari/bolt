@@ -17,7 +17,7 @@
 /// Logic, related to managing LSP inlay hint inlays.
 pub mod inlay_hints;
 
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use gpui::{Context, HighlightStyle, Hsla, Rgba, Task};
 use multi_buffer::Anchor;
@@ -54,6 +54,8 @@ pub struct Inlay {
 pub enum InlayContent {
     Text(text::Rope),
     Color(Hsla),
+    // BOLT: an inline image (Iconify icon previews), rendered like color inlays.
+    Image(Arc<gpui::Image>),
 }
 
 impl Inlay {
@@ -91,6 +93,15 @@ impl Inlay {
         }
     }
 
+    // BOLT: image inlay, sharing the color inlay id space.
+    pub fn image(id: usize, position: Anchor, image: Arc<gpui::Image>) -> Self {
+        Self {
+            id: InlayId::Color(id),
+            position,
+            content: InlayContent::Image(image),
+        }
+    }
+
     pub fn edit_prediction<T: Into<Rope>>(id: usize, position: Anchor, text: T) -> Self {
         Self {
             id: InlayId::EditPrediction(id),
@@ -119,7 +130,9 @@ impl Inlay {
         static COLOR_TEXT: OnceLock<Rope> = OnceLock::new();
         match &self.content {
             InlayContent::Text(text) => text,
-            InlayContent::Color(_) => COLOR_TEXT.get_or_init(|| Rope::from("◼")),
+            InlayContent::Color(_) | InlayContent::Image(_) => {
+                COLOR_TEXT.get_or_init(|| Rope::from("◼"))
+            }
         }
     }
 

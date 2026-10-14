@@ -192,6 +192,10 @@ fn show_suggestion(
     cx: &mut Context<Workspace>,
     build_notification: impl FnOnce(&mut Context<MessageNotification>) -> MessageNotification,
 ) {
+    // BOLT: suggestions are opt-in (`suggest_extensions`).
+    if !ExtensionSettings::get_global(cx).suggest_extensions {
+        return;
+    }
     let notification_id = notification_id(extension_id);
     if workspace.has_notification(&notification_id) {
         return;

@@ -17,14 +17,14 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
   switch (default Bolt's panel); release bundle script + first clean release build.
 
 ### Current State
-- Installed: **/Applications/Bolt.app** (moved there from `target/release/Bolt.app`, release build of commit
-  1272519900, not stripped, 353 MB). To update: `script/bolt-bundle-mac` then move the new bundle to /Applications
-  (quit Bolt first). The script now strips binaries (next bundle much smaller).
-- Dev: `cargo build` → `./target/debug/bolt <path>` (target/debug was wiped by `cargo clean`; first dev build again
-  ~10 min).
-- User test project: `~/Smartness/smartness-pms-webapp` ("PMS v4").
-- I can't see the screen (no Screen Recording permission): verify with build + `~/Library/Logs/Bolt/Bolt.log` +
-  `lsof`, and ask the user for visual checks.
+- All work committed and pushed on `main`. Release bundle rebuilt on 2026-10-14 (`target/release/Bolt.app`); the copy in
+  /Applications is replaced only when the user asks (quit Bolt first).
+- Dev: `cargo build` → `./target/debug/bolt <path>` (incremental 10 s–2 min; touching `editor`/`project`/`settings_content`
+  rebuilds most of the tree). The user prefers debug builds for checks.
+- User test project: `~/Smartness/smartness-pms-webapp` ("PMS v4"). Its `typescript` is `typescript-native-bridge`
+  (tsgo), used by vtsls.
+- I can't see the screen: verify with build + `~/Library/Logs/Bolt/Bolt.log`, ask the user for visual checks.
+- User settings were merged into Bolt defaults; `~/.config/bolt/settings.json` is empty (backup `.bak-2026-10-14`).
 
 ### Decisions Made
 - Git identity is repo-local: `Nicola Spadari <spadari.nicola@gmail.com>`; push auth via repo-local credential helper
@@ -38,20 +38,22 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 
 ### Open Issues
 - `cargo test -p project_panel`: 3 tests fail only because of Bolt defaults (font size, dock left, autosave); not bugs.
-- Remaining P1 items: View & Sort (tree/list), Tags (no core support), Show Git Output, "Checkout detached…",
-  keyboard navigation in the SCM list (see PROGRESS P1).
-- `~/.config/bolt/settings.json` contains `diagnostics.button: false` (user hid it; ask if unintended).
+- Semantic tokens sometimes missing after startup (likely the tsgo bridge answering empty before the project loads and
+  Zed not re-requesting); editing the file refreshes. Fix if it recurs: re-request when the server finishes loading.
+- `.rules` contains a block injected by the context-mode plugin: never commit it.
 
 ### Next Steps (wait for the user to pick)
-1. User feedback on the source control panel → iterate.
-2. Backlog: Cursor-style autocomplete (decide approach/provider with the user first, AI is off), merge panel (VS Code
-   merge conflict editor), remaining P1 items, `script/bolt-sync` (upstream sync script, P0).
+1. User feedback on the release build (app icon, Iconify, colors).
+2. Backlog: merge panel (VS Code merge conflict editor), `script/bolt-sync` (upstream sync, P0). Cursor-style
+   autocomplete: dropped (Cursor Tab is server-side); Zed's local next-edit prediction (Zeta2/Sweep via Ollama) is
+   the option if wanted later.
+3. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).
 
 ### Useful Context
 - Xcode 26 needs `xcodebuild -downloadComponent MetalToolchain` (done) or `gpui_apple` fails.
 - `cargo build` dev ~10 min cold / seconds incremental; release from scratch ~30–40 min (thin LTO).
 - Debug-only items (e.g. `zed_actions::wsl_actions`) break release builds: check `#[cfg(debug_assertions)]`.
 - Bolt crates/files: `crates/bolt_search_panel`, `crates/bolt_scm`, `crates/project_panel/src/bolt_nesting*`,
-  `crates/title_bar/src/bolt_project_status.rs`, `script/bolt-*`, `assets/icons/bolt/`,
+  `crates/title_bar/src/bolt_project_status.rs`, `crates/bolt_iconify`, `script/bolt-*`, `assets/icons/bolt/`,
   `assets/icons/bundled_icon_themes/`, `assets/themes/one_dark_pro_cursor/`.
 - User preferences: Italian, concise; simplest approach; one feature at a time, verified with a build.
