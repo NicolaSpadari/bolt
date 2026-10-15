@@ -152,14 +152,13 @@ file is upstream's hottest (46 commits / 3 months).
   - Main button: Commit (changes / merge) → Publish Branch (no upstream) → Sync Changes n↓ m↑ → Commit disabled;
     spinner while a remote operation runs.
   - Status bar: sync button with `n↓ m↑` or cloud-upload Publish button next to the branch
-    (`bolt_scm::Sync` / `bolt_scm::PublishBranch`). ⏳ No spinner there yet.
+    (`bolt_scm::Sync` / `bolt_scm::PublishBranch`). No spinner there (user: the panel button is enough).
   - "Create Branch From…" = `git checkout -q -b <name> --no-track <ref>` (VS Code): before, a branch created from
     `origin/main` tracked `origin/main`, so Sync pushed it to `main` (blocked by GitHub rules on cb-frontend).
     Branch popover (footer): "Create From…" button in the tab bar.
   - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
     the panel as a truncated `Label` (ellipsis).
-- ⏳ Terminal panel "+" button (user request 2026-10-15): today it opens a dropdown (New Terminal / Spawn Task); a click
-  must open a new terminal directly, no dropdown and no Spawn Task entry.
+- ✅ Terminal panel "+" opens a new terminal directly (no New Terminal / Spawn Task menu) (user request 2026-10-15).
 - ⏳ TypeScript hover always expanded (user request 2026-10-15): hovering an `interface` / `type` shows only its name;
   it must show the whole declaration (scrolling when long). VS Code does this with expandable hovers (+/−, TS
   quickinfo `verbosityLevel`); Bolt: always at max verbosity, no +/− controls. Check what vtsls / tsgo expose and
@@ -238,6 +237,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/git_ui/src/git_ui.rs` (scm 2) | `remote_output` module `pub` | push/pull/fetch toasts from bolt_scm |
 | `crates/git_ui/src/git_picker.rs` | "Create From…" button in the branch popover tab bar (action built by name: `bolt_scm` depends on `git_ui`) | VS Code "Create Branch From…" from the footer |
 | `crates/title_bar/Cargo.toml` | `bolt_scm` dep | footer Publish / Sync button |
+| `crates/terminal_view/src/terminal_panel.rs` | "+" in the terminal tab bar = `IconButton` dispatching `workspace::NewTerminal` (was a New Terminal / Spawn Task popover) | user request |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.

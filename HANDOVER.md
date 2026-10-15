@@ -45,7 +45,7 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - `.rules` contains a block injected by the context-mode plugin: never commit it.
 
 ### Next Steps (wait for the user to pick)
-1. Backlog (PROGRESS): spinner on the status bar sync button, terminal "+" → new terminal directly, TypeScript hover
+1. Backlog (PROGRESS): TypeScript hover
    always expanded, merge panel, search panel UI restyle (Zed-native, UI only), lighter builds via Cargo features
    (later), `script/bolt-sync` (upstream sync, P0).
 2. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).

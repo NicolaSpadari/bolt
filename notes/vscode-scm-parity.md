@@ -24,7 +24,7 @@ Target: behave like VS Code's built-in Git SCM view (`extensions/git` + `src/vs/
 | 17 | Title bar | Commit ✓, Refresh, view toggle, "…" menu | | ⏳ |
 | 18 | "…" menu | Pull, Push, Clone, Checkout to…, Fetch; submenus Commit, Changes, Pull/Push, Branch (create/rename/delete/merge/rebase/publish), Remote (add/remove), Stash (stash, incl. untracked, apply/pop latest/pick, drop, view), Tags (create/delete), Worktrees; Show Git Output | | ⏳ |
 | 19 | Merge conflicts | Merge Changes group; open in merge editor / accept current/incoming; stage = mark resolved | | ⏳ |
-| 20 | Status bar | `statusbar.ts`: branch name → checkout picker; with upstream: sync icon + "n↓ m↑" when ahead/behind; without: cloud-upload (Publish Branch). "Create Branch From…" uses `git checkout -q -b <name> --no-track <ref>` (`git.ts`) | | ✅ (no spinner in the status bar yet) |
+| 20 | Status bar | `statusbar.ts`: branch name → checkout picker; with upstream: sync icon + "n↓ m↑" when ahead/behind; without: cloud-upload (Publish Branch). "Create Branch From…" uses `git checkout -q -b <name> --no-track <ref>` (`git.ts`) | | ✅ (no status bar spinner: not wanted) |
 | 21 | Partial staging | Stage/revert selected ranges and hunks from diff editor and gutter | | ⏳ |
 | 22 | Keyboard | Full keyboard navigation in the list; `cmd-enter` commit from input | | ⏳ |
 | 23 | Git output | Log of executed git commands | | ⏳ |
