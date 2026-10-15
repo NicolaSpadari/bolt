@@ -23,8 +23,8 @@ use project::{
 };
 use theme::ActiveTheme as _;
 use ui::{
-    Color, Icon, IconButton, IconButtonShape, IconName, IconSize, Label, LabelSize, ListItem,
-    ListItemSpacing, Tooltip, prelude::*,
+    Color, Icon, IconButton, IconButtonShape, IconName, IconSize, Label, LabelSize, Tab, Tooltip,
+    prelude::*,
 };
 use util::{ResultExt as _, paths::PathMatcher};
 use workspace::{
@@ -37,6 +37,8 @@ const SEARCH_PANEL_KEY: &str = "BoltSearchPanel";
 const SEARCH_DEBOUNCE: Duration = Duration::from_millis(250);
 const REFRESH_DEBOUNCE: Duration = Duration::from_millis(600);
 const PREVIEW_CONTEXT_CHARS: usize = 24;
+// Same row height as the source control panel (Zed's git panel rows).
+const LIST_ITEM_HEIGHT: gpui::Rems = gpui::rems(1.75);
 
 actions!(
     bolt_search,
@@ -717,7 +719,7 @@ impl SearchPanel {
         h_flex()
             .w_full()
             .min_w_0()
-            .h_7()
+            .h(px(26.))
             .pl_1p5()
             .pr_0p5()
             .gap_1()
@@ -758,11 +760,15 @@ impl SearchPanel {
         let all_collapsed = has_results && self.results.iter().all(|file| file.collapsed);
         h_flex()
             .w_full()
-            .px_2()
-            .h_8()
+            .flex_none()
+            .h(Tab::container_height(cx))
+            .pl_2p5()
+            .pr_2()
             .justify_between()
+            .border_b_1()
+            .border_color(cx.theme().colors().border)
             .child(
-                Label::new("SEARCH")
+                Label::new("Search")
                     .size(LabelSize::Small)
                     .color(Color::Muted),
             )
@@ -849,8 +855,9 @@ impl SearchPanel {
 
         v_flex()
             .w_full()
-            .px_2()
-            .gap_1()
+            .flex_none()
+            .p_2()
+            .gap_1p5()
             .child(
                 h_flex()
                     .w_full()
@@ -881,7 +888,7 @@ impl SearchPanel {
                         v_flex()
                             .flex_1()
                             .min_w_0()
-                            .gap_1()
+                            .gap_1p5()
                             .child(self.render_input(&self.query_editor, query_buttons, window, cx))
                             .when(replace_enabled, |this| {
                                 this.child(self.render_input(
@@ -966,8 +973,8 @@ impl SearchPanel {
         };
         Some(
             div()
-                .px_3()
-                .py_1()
+                .px_2p5()
+                .pb_1()
                 .child(
                     Label::new(message)
                         .size(LabelSize::Small)
@@ -980,93 +987,123 @@ impl SearchPanel {
         )
     }
 
+    /// A list row styled like the source control panel's entries.
+    fn row_container(
+        &self,
+        id: ElementId,
+        group: SharedString,
+        selected: bool,
+        cx: &Context<Self>,
+    ) -> gpui::Stateful<Div> {
+        let colors = cx.theme().colors();
+        let info_color = cx.theme().status().info;
+        h_flex()
+            .id(id)
+            .group(group)
+            .h(LIST_ITEM_HEIGHT)
+            .w_full()
+            .pr_1()
+            .gap_1p5()
+            .cursor_pointer()
+            .when(selected, |this| this.bg(info_color.alpha(0.08)))
+            .hover(move |style| {
+                style.bg(if selected {
+                    info_color.alpha(0.12)
+                } else {
+                    colors.ghost_element_hover
+                })
+            })
+    }
+
     fn render_row(&self, row: Row, cx: &Context<Self>) -> AnyElement {
         let is_selected = self.selected_row == Some(row);
         match row {
             Row::File(file_ix) => {
                 let file = &self.results[file_ix];
-                let icon = FileIcons::get_icon(&file.path, cx).map(|icon| {
-                    Icon::from_path(icon)
-                        .color(Color::Muted)
-                        .size(IconSize::Small)
-                });
-                ListItem::new(("bolt-search-file", file_ix))
-                    .spacing(ListItemSpacing::Sparse)
-                    .toggle(Some(!file.collapsed))
-                    .on_toggle(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                        if let Some(file) = this.results.get_mut(file_ix) {
-                            file.collapsed = !file.collapsed;
-                            cx.notify();
-                        }
-                    }))
-                    .toggle_state(is_selected)
-                    .start_slot::<Icon>(icon)
-                    .child(
-                        h_flex()
-                            .w_full()
-                            .min_w_0()
-                            .gap_1p5()
-                            .child(Label::new(file.file_name.clone()).size(LabelSize::Small))
-                            .child(
-                                Label::new(file.directory.clone())
-                                    .size(LabelSize::XSmall)
-                                    .color(Color::Muted)
-                                    .truncate(),
+                let icon = FileIcons::get_icon(&file.path, cx)
+                    .map(Icon::from_path)
+                    .unwrap_or_else(|| Icon::new(IconName::File))
+                    .color(Color::Muted)
+                    .size(IconSize::Small);
+                let group: SharedString = format!("bolt-search-file-{file_ix}").into();
+                let actions = h_flex()
+                    .gap_0p5()
+                    .when(self.replace_enabled, |this| {
+                        this.child(
+                            IconButton::new(
+                                ("bolt-search-replace-file", file_ix),
+                                IconName::ReplaceAll,
                             )
-                            .child(div().flex_1())
-                            .child(
-                                div()
-                                    .px_1p5()
-                                    .rounded_full()
-                                    .bg(cx.theme().colors().element_background)
-                                    .child(
-                                        Label::new(file.matches.len().to_string())
-                                            .size(LabelSize::XSmall)
-                                            .color(Color::Muted),
-                                    ),
-                            ),
-                    )
-                    .end_slot(
-                        h_flex()
-                            .gap_0p5()
-                            .when(self.replace_enabled, |this| {
-                                this.child(
-                                    IconButton::new(
-                                        ("bolt-search-replace-file", file_ix),
-                                        IconName::ReplaceAll,
-                                    )
-                                    .icon_size(IconSize::XSmall)
-                                    .tooltip(Tooltip::text("Replace All in File"))
-                                    .on_click(cx.listener(
-                                        move |this, _: &ClickEvent, _, cx| {
-                                            this.replace_in_file(file_ix, None, cx)
-                                        },
-                                    )),
-                                )
+                            .icon_size(IconSize::Small)
+                            .tooltip(Tooltip::text("Replace All in File"))
+                            .on_click(cx.listener(
+                                move |this, _: &ClickEvent, _, cx| {
+                                    cx.stop_propagation();
+                                    this.replace_in_file(file_ix, None, cx)
+                                },
+                            )),
+                        )
+                    })
+                    .child(
+                        IconButton::new(("bolt-search-dismiss-file", file_ix), IconName::Close)
+                            .icon_size(IconSize::Small)
+                            .tooltip(Tooltip::text("Dismiss"))
+                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                cx.stop_propagation();
+                                this.dismiss(file_ix, None, cx)
+                            })),
+                    );
+                self.row_container(
+                    ElementId::NamedInteger("bolt-search-file".into(), file_ix as u64),
+                    group.clone(),
+                    is_selected,
+                    cx,
+                )
+                .pl_2()
+                .child(
+                    h_flex()
+                        .min_w_0()
+                        .flex_1()
+                        .gap_1()
+                        .child(
+                            Icon::new(if file.collapsed {
+                                IconName::ChevronRight
+                            } else {
+                                IconName::ChevronDown
                             })
-                            .child(
-                                IconButton::new(
-                                    ("bolt-search-dismiss-file", file_ix),
-                                    IconName::Close,
-                                )
-                                .icon_size(IconSize::XSmall)
-                                .tooltip(Tooltip::text("Dismiss"))
-                                .on_click(cx.listener(
-                                    move |this, _: &ClickEvent, _, cx| {
-                                        this.dismiss(file_ix, None, cx)
-                                    },
-                                )),
-                            ),
-                    )
-                    .show_end_slot_on_hover()
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                        this.selected_row = Some(Row::File(file_ix));
-                        if let Some(file) = this.results.get_mut(file_ix) {
-                            file.collapsed = !file.collapsed;
-                        }
-                        cx.notify();
-                    }))
-                    .into_any_element()
+                            .size(IconSize::XSmall)
+                            .color(Color::Muted),
+                        )
+                        .child(icon)
+                        .child(
+                            h_flex()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .child(div().flex_none().child(
+                                    Label::new(format!("{} ", file.file_name)).single_line(),
+                                ))
+                                .child(
+                                    Label::new(file.directory.clone())
+                                        .single_line()
+                                        .color(Color::Muted)
+                                        .truncate_start(),
+                                ),
+                        ),
+                )
+                .child(div().flex_none().visible_on_hover(group).child(actions))
+                .child(
+                    Label::new(file.matches.len().to_string())
+                        .size(LabelSize::Small)
+                        .color(Color::Muted),
+                )
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.selected_row = Some(Row::File(file_ix));
+                    if let Some(file) = this.results.get_mut(file_ix) {
+                        file.collapsed = !file.collapsed;
+                    }
+                    cx.notify();
+                }))
+                .into_any_element()
             }
             Row::Match(file_ix, match_ix) => {
                 let search_match = &self.results[file_ix].matches[match_ix];
@@ -1074,54 +1111,53 @@ impl SearchPanel {
                     .replace_enabled
                     .then(|| self.replacement_for(search_match, cx))
                     .flatten();
-                ListItem::new(("bolt-search-match", file_ix * 100_000 + match_ix))
-                    .indent_level(1)
-                    .indent_step_size(px(20.))
-                    .spacing(ListItemSpacing::Sparse)
-                    .toggle_state(is_selected)
-                    .child(div().text_ui_sm(cx).child(render_preview(
-                        search_match,
-                        replacement,
-                        cx,
-                    )))
-                    .end_slot(
-                        h_flex()
-                            .gap_0p5()
-                            .when(self.replace_enabled, |this| {
-                                this.child(
-                                    IconButton::new(
-                                        ("bolt-search-replace-match", file_ix * 100_000 + match_ix),
-                                        IconName::Replace,
-                                    )
-                                    .icon_size(IconSize::XSmall)
-                                    .tooltip(Tooltip::text("Replace"))
-                                    .on_click(cx.listener(
-                                        move |this, _: &ClickEvent, _, cx| {
-                                            this.replace_in_file(file_ix, Some(match_ix), cx)
-                                        },
-                                    )),
-                                )
-                            })
-                            .child(
-                                IconButton::new(
-                                    ("bolt-search-dismiss-match", file_ix * 100_000 + match_ix),
-                                    IconName::Close,
-                                )
-                                .icon_size(IconSize::XSmall)
-                                .tooltip(Tooltip::text("Dismiss"))
-                                .on_click(cx.listener(
-                                    move |this, _: &ClickEvent, _, cx| {
-                                        this.dismiss(file_ix, Some(match_ix), cx)
-                                    },
-                                )),
-                            ),
-                    )
-                    .show_end_slot_on_hover()
-                    .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
-                        let double_click = event.click_count() > 1;
-                        this.open_match(file_ix, match_ix, double_click, !double_click, window, cx);
-                    }))
-                    .into_any_element()
+                let id = file_ix * 100_000 + match_ix;
+                let group: SharedString = format!("bolt-search-match-{id}").into();
+                let actions = h_flex()
+                    .gap_0p5()
+                    .when(self.replace_enabled, |this| {
+                        this.child(
+                            IconButton::new(("bolt-search-replace-match", id), IconName::Replace)
+                                .icon_size(IconSize::Small)
+                                .tooltip(Tooltip::text("Replace"))
+                                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                    cx.stop_propagation();
+                                    this.replace_in_file(file_ix, Some(match_ix), cx)
+                                })),
+                        )
+                    })
+                    .child(
+                        IconButton::new(("bolt-search-dismiss-match", id), IconName::Close)
+                            .icon_size(IconSize::Small)
+                            .tooltip(Tooltip::text("Dismiss"))
+                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                cx.stop_propagation();
+                                this.dismiss(file_ix, Some(match_ix), cx)
+                            })),
+                    );
+                self.row_container(
+                    ElementId::NamedInteger("bolt-search-match".into(), id as u64),
+                    group.clone(),
+                    is_selected,
+                    cx,
+                )
+                // Under the file icon (chevron + gap).
+                .pl(rems(1.5))
+                .child(
+                    div()
+                        .min_w_0()
+                        .flex_1()
+                        .overflow_hidden()
+                        .whitespace_nowrap()
+                        .text_ui(cx)
+                        .child(render_preview(search_match, replacement, cx)),
+                )
+                .child(div().flex_none().visible_on_hover(group).child(actions))
+                .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+                    let double_click = event.click_count() > 1;
+                    this.open_match(file_ix, match_ix, double_click, !double_click, window, cx);
+                }))
+                .into_any_element()
             }
         }
     }

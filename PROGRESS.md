@@ -167,8 +167,8 @@ file is upstream's hottest (46 commits / 3 months).
   vtsls has the same provider but never passes a level over LSP, so `crates/project/src/bolt_typescript_hover.rs` asks
   `typescript.tsserverRequest` `quickinfo` with `verbosityLevel: 1` and replaces the signature code block of vtsls'
   hover. Level 1 = the hovered declaration expanded (`interface User { … }`), nested types by name. Works with
-  vtsls' bundled TS 5.9.3 and the tsgo bridge (TS 6). `.vue` files: hover comes from vue-language-server, not covered.
-- ⏳ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
+  vtsls' bundled TS 5.9.3 and the tsgo bridge (TS 6). Works in `.vue` files too (verified by the user).
+- ✅ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
   (toolbar at tab height, Zed list rows, outlined buttons, Zed inputs). UI only: the logic stays as is (user request
   2026-10-14).
 - ⏳ Lighter builds (later, user request 2026-10-14): exclude switched-off subsystems from the build with Cargo
