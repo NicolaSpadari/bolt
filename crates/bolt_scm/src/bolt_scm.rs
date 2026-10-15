@@ -7,6 +7,7 @@
 //! Spec: `notes/vscode-scm-parity.md`.
 
 mod merge_picker;
+mod stash_picker;
 
 use std::ops::Range;
 
@@ -68,8 +69,28 @@ actions!(
         Commit,
         /// Merges a branch into the current one without committing (`git merge --no-commit --no-ff`).
         MergeBranch,
+        /// Creates a new branch from HEAD and switches to it.
+        CreateBranch,
         /// Creates a new branch from a chosen ref and switches to it.
         CreateBranchFrom,
+        /// Deletes a local branch (asks before force-deleting a branch that is not fully merged).
+        DeleteBranch,
+        /// Deletes a branch on its remote (`git push <remote> :<branch>`).
+        DeleteRemoteBranch,
+        /// Discards all unstaged changes, untracked files included.
+        DiscardAllChanges,
+        /// Applies a chosen stash.
+        ApplyStash,
+        /// Pops a chosen stash.
+        PopStash,
+        /// Drops a chosen stash.
+        DropStash,
+        /// Shows the changes of a chosen stash.
+        ViewStash,
+        /// Pulls the current branch with `--rebase`.
+        PullRebase,
+        /// Force pushes the current branch (`--force-with-lease`).
+        ForcePush,
         /// Pulls (when the branch has an upstream), then pushes the current branch.
         Sync,
         /// Pushes the current branch and sets its upstream.
@@ -91,6 +112,52 @@ pub fn init(cx: &mut App) {
         });
         workspace.register_action(|workspace, _: &CreateBranchFrom, window, cx| {
             merge_picker::open(workspace, merge_picker::Mode::CreateFrom, window, cx);
+        });
+        workspace.register_action(|workspace, _: &CreateBranch, window, cx| {
+            merge_picker::open_new_branch_name(workspace, window, cx);
+        });
+        workspace.register_action(|workspace, _: &DeleteBranch, window, cx| {
+            merge_picker::open(workspace, merge_picker::Mode::Delete, window, cx);
+        });
+        workspace.register_action(|workspace, _: &DeleteRemoteBranch, window, cx| {
+            merge_picker::open(workspace, merge_picker::Mode::DeleteRemote, window, cx);
+        });
+        workspace.register_action(|workspace, _: &DiscardAllChanges, window, cx| {
+            if let Some(panel) = workspace.panel::<ScmPanel>(cx) {
+                panel.update(cx, |panel, cx| {
+                    let entries = panel
+                        .sections
+                        .iter()
+                        .filter(|section| section.kind == SectionKind::Changes)
+                        .flat_map(|section| section.entries.iter().cloned())
+                        .collect();
+                    panel.discard(entries, window, cx)
+                });
+            }
+        });
+        workspace.register_action(|workspace, _: &ApplyStash, window, cx| {
+            stash_picker::open(workspace, stash_picker::Mode::Apply, window, cx);
+        });
+        workspace.register_action(|workspace, _: &PopStash, window, cx| {
+            stash_picker::open(workspace, stash_picker::Mode::Pop, window, cx);
+        });
+        workspace.register_action(|workspace, _: &DropStash, window, cx| {
+            stash_picker::open(workspace, stash_picker::Mode::Drop, window, cx);
+        });
+        workspace.register_action(|workspace, _: &ViewStash, window, cx| {
+            stash_picker::open(workspace, stash_picker::Mode::View, window, cx);
+        });
+        workspace.register_action(|workspace, _: &PullRebase, window, cx| {
+            if let Some(panel) = workspace.panel::<ScmPanel>(cx) {
+                panel.update(cx, |panel, cx| {
+                    panel.run_remote(RemoteOperation::PullRebase, window, cx)
+                });
+            }
+        });
+        workspace.register_action(|workspace, _: &ForcePush, window, cx| {
+            if let Some(panel) = workspace.panel::<ScmPanel>(cx) {
+                panel.update(cx, |panel, cx| panel.force_push(window, cx));
+            }
         });
         workspace.register_action(|workspace, _: &Sync, window, cx| {
             if let Some(panel) = workspace.panel::<ScmPanel>(cx) {
@@ -154,7 +221,10 @@ enum AfterCommit {
 enum RemoteOperation {
     Fetch,
     Pull,
+    PullRebase,
     Push,
+    /// `git push --force-with-lease` (VS Code's default `git.useForcePushWithLease`).
+    ForcePush,
     /// Pull (when the branch has an upstream), then push.
     Sync,
 }
@@ -164,7 +234,9 @@ impl RemoteOperation {
         match self {
             RemoteOperation::Fetch => "fetch",
             RemoteOperation::Pull => "pull",
+            RemoteOperation::PullRebase => "pull --rebase",
             RemoteOperation::Push => "push",
+            RemoteOperation::ForcePush => "push --force-with-lease",
             RemoteOperation::Sync => "sync",
         }
     }
@@ -809,11 +881,15 @@ impl ScmPanel {
                 match result {
                     Ok(()) => {
                         editor.update(cx, |editor, cx| editor.clear(window, cx));
+                        // VS Code refreshes the state right after committing: until then the merge (and so the main
+                        // button showing Commit) would look still in progress.
+                        repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
                         if let AfterCommit::Remote(operation) = after {
                             this.run_remote(operation, window, cx);
                         }
                     }
                     Err(error) => {
+                        log::error!("bolt_scm: git commit failed: {error:?}");
                         if let Some(workspace) = workspace.upgrade() {
                             show_error_toast(workspace, "commit", error, cx);
                         }
@@ -921,14 +997,22 @@ impl ScmPanel {
             .map(|name| name.to_string().into())
             .unwrap_or_else(|| branch_name.clone());
         let pull = match operation {
-            RemoteOperation::Pull => true,
-            RemoteOperation::Fetch | RemoteOperation::Push => false,
+            RemoteOperation::Pull | RemoteOperation::PullRebase => true,
+            RemoteOperation::Fetch | RemoteOperation::Push | RemoteOperation::ForcePush => false,
             RemoteOperation::Sync => tracked_upstream.is_some(),
         };
-        let push = matches!(operation, RemoteOperation::Push | RemoteOperation::Sync);
-        let push_options = tracked_upstream
-            .is_none()
-            .then_some(PushOptions::SetUpstream);
+        let rebase = operation == RemoteOperation::PullRebase;
+        let push = matches!(
+            operation,
+            RemoteOperation::Push | RemoteOperation::ForcePush | RemoteOperation::Sync
+        );
+        let push_options = if tracked_upstream.is_none() {
+            Some(PushOptions::SetUpstream)
+        } else if operation == RemoteOperation::ForcePush {
+            Some(PushOptions::Force)
+        } else {
+            None
+        };
         // `git pull <remote>` needs the branch name when there is no upstream to pull from.
         let pull_branch = branch.upstream.is_none().then(|| branch_name.clone());
         let pull_askpass = pull.then(|| self.askpass("git pull", window, cx));
@@ -965,7 +1049,7 @@ impl ScmPanel {
                     log::info!("bolt_scm: git pull {remote_name}");
                     let output = repository
                         .update(cx, |repository, cx| {
-                            repository.pull(pull_branch, remote_name.clone(), false, askpass, cx)
+                            repository.pull(pull_branch, remote_name.clone(), rebase, askpass, cx)
                         })
                         .await??;
                     if !push {
@@ -997,6 +1081,73 @@ impl ScmPanel {
             .await;
             this.update(cx, |this, cx| this.finish_remote(operation, result, cx))
                 .log_err();
+        })
+        .detach();
+    }
+
+    /// VS Code's `git.deleteRemoteBranch` (`repository.deleteRemoteRef`): no confirmation, the remote-tracking ref is
+    /// removed by the push itself.
+    pub(crate) fn delete_remote_branch(
+        &mut self,
+        remote: String,
+        branch: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(repository) = self.repository.clone() else {
+            return;
+        };
+        let askpass = self.askpass("git push", window, cx);
+        let workspace = self.workspace.clone();
+        cx.spawn(async move |_, cx| {
+            log::info!("bolt_scm: git push {remote} :{branch}");
+            let result: Result<()> = async {
+                repository
+                    .update(cx, |repository, cx| {
+                        repository.push(
+                            SharedString::default(),
+                            branch.clone().into(),
+                            remote.clone().into(),
+                            None,
+                            askpass,
+                            cx,
+                        )
+                    })
+                    .await??;
+                Ok(())
+            }
+            .await;
+            cx.update(|cx| {
+                repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
+                if let Err(error) = result {
+                    log::error!("bolt_scm: deleting {remote}/{branch} failed: {error:?}");
+                    if let Some(workspace) = workspace.upgrade() {
+                        show_error_toast(workspace, "delete remote branch", error, cx);
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// VS Code's `git.confirmForcePush` prompt (`commands.ts` `_push`).
+    fn force_push(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let prompt = window.prompt(
+            PromptLevel::Warning,
+            "You are about to force push your changes, this can be destructive and could inadvertently overwrite \
+             changes made by others.\n\nAre you sure to continue?",
+            None,
+            &["OK", "Cancel"],
+            cx,
+        );
+        cx.spawn_in(window, async move |this, cx| {
+            if prompt.await != Ok(0) {
+                return;
+            }
+            this.update_in(cx, |this, window, cx| {
+                this.run_remote(RemoteOperation::ForcePush, window, cx)
+            })
+            .log_err();
         })
         .detach();
     }
@@ -1090,11 +1241,18 @@ impl ScmPanel {
         if count == 0 {
             return;
         }
+        let detail = if count == 1 {
+            "There is 1 stash that will be subject to pruning, and MAY BE IMPOSSIBLE TO RECOVER.".to_string()
+        } else {
+            format!(
+                "There are {count} stashes that will be subject to pruning, and MAY BE IMPOSSIBLE TO RECOVER."
+            )
+        };
         let prompt = window.prompt(
             PromptLevel::Warning,
-            &format!("Are you sure you want to drop ALL {count} stashes?"),
-            Some("This is IRREVERSIBLE!"),
-            &["Drop All", "Cancel"],
+            "Are you sure you want to drop ALL stashes?",
+            Some(&detail),
+            &["Yes", "Cancel"],
             cx,
         );
         let workspace = self.workspace.clone();
@@ -1160,27 +1318,31 @@ impl ScmPanel {
                         .submenu("Changes", |menu, _, _| {
                             menu.action("Stage All Changes", git::StageAll.boxed_clone())
                                 .action("Unstage All Changes", git::UnstageAll.boxed_clone())
+                                .action("Discard All Changes", DiscardAllChanges.boxed_clone())
                         })
                         .submenu("Pull, Push", move |menu, _, _| {
                             menu.map(sync.clone())
+                                .separator()
                                 .map(submenu_pull.clone())
-                                .action("Pull (Rebase)", git::PullRebase.boxed_clone())
+                                .action("Pull (Rebase)", PullRebase.boxed_clone())
+                                .separator()
                                 .map(submenu_push.clone())
-                                .action("Force Push", git::ForcePush.boxed_clone())
+                                .action("Push (Force)", ForcePush.boxed_clone())
+                                .separator()
                                 .map(submenu_fetch.clone())
                         })
                         .submenu("Branch", |menu, _, _| {
-                            menu.action("Merge Branch…", MergeBranch.boxed_clone())
-                                .action("Create Branch…", zed_actions::git::Branch.boxed_clone())
+                            menu.action("Merge…", MergeBranch.boxed_clone())
+                                .separator()
+                                .action("Create Branch…", CreateBranch.boxed_clone())
                                 .action("Create Branch From…", CreateBranchFrom.boxed_clone())
+                                .separator()
                                 .action(
                                     "Rename Branch…",
                                     git::RenameBranch { branch: None }.boxed_clone(),
                                 )
-                                .action("Delete Branch…", zed_actions::git::Branch.boxed_clone())
-                        })
-                        .submenu("Remote", |menu, _, _| {
-                            menu.action("Add Remote…", zed_actions::git::CreateRemote.boxed_clone())
+                                .action("Delete Branch…", DeleteBranch.boxed_clone())
+                                .action("Delete Remote Branch…", DeleteRemoteBranch.boxed_clone())
                         })
                         .submenu("Stash", move |menu, _, _| {
                             let drop_all = drop_all.clone();
@@ -1189,19 +1351,19 @@ impl ScmPanel {
                                 .action("Stash Staged", git::StashStaged.boxed_clone())
                                 .separator()
                                 .action("Apply Latest Stash", git::StashApply.boxed_clone())
-                                .action("Apply Stash…", zed_actions::git::ViewStash.boxed_clone())
+                                .action("Apply Stash…", ApplyStash.boxed_clone())
                                 .separator()
                                 .action("Pop Latest Stash", git::StashPop.boxed_clone())
-                                .action("Pop Stash…", zed_actions::git::ViewStash.boxed_clone())
+                                .action("Pop Stash…", PopStash.boxed_clone())
                                 .separator()
-                                .action("Drop Stash…", zed_actions::git::ViewStash.boxed_clone())
+                                .action("Drop Stash…", DropStash.boxed_clone())
                                 .entry("Drop All Stashes…", None, move |window, cx| {
                                     drop_all
                                         .update(cx, |panel, cx| panel.drop_all_stashes(window, cx))
                                         .ok();
                                 })
                                 .separator()
-                                .action("View Stash…", zed_actions::git::ViewStash.boxed_clone())
+                                .action("View Stash…", ViewStash.boxed_clone())
                         })
                         .submenu("Worktrees", |menu, _, _| {
                             menu.action("Worktrees…", zed_actions::git::Worktree.boxed_clone())
@@ -1282,8 +1444,8 @@ impl ScmPanel {
         } else if let Some(operation) = self.pending_remote {
             match operation {
                 RemoteOperation::Fetch => "Fetching…".into(),
-                RemoteOperation::Pull => "Pulling…".into(),
-                RemoteOperation::Push => "Pushing…".into(),
+                RemoteOperation::Pull | RemoteOperation::PullRebase => "Pulling…".into(),
+                RemoteOperation::Push | RemoteOperation::ForcePush => "Pushing…".into(),
                 RemoteOperation::Sync => "Syncing…".into(),
             }
         } else {

@@ -170,6 +170,25 @@ file is upstream's hottest (46 commits / 3 months).
   Predictions texts, Zed's DMG + auto-update (unused by Bolt).
 - ✅ Merge / Create Branch From pickers sorted by most recent commit (VS Code `git.branchSortOrder` default
   `committerdate`, checked in `extensions/git/package.json`).
+- 🚧 SCM "…" menu audit vs VS Code (2026-10-15, user report: Delete Branch only switched; reference
+  `notes/vscode-git-commands.md`, from `extensions/git/src/commands.ts`). Built, waiting for the user's check.
+  - Delete Branch… = own picker (local branches, current excluded) → `git branch -d`; "not fully merged" → VS Code
+    modal → `-D`. Create Branch… = name input, `git checkout -q -b <name> --no-track HEAD`; "already exists" check.
+  - Apply / Pop / Drop / View Stash… = own picker per action (`stash_picker.rs`); Zed's applied on Enter for all.
+    Drop asks like VS Code; Drop All uses VS Code's wording.
+  - Pull (Rebase) / Push (Force) run from bolt_scm (were routed through Zed's hidden GitPanel); force push asks
+    VS Code's confirmation, `--force-with-lease`. Remote submenu dropped (user: not used; Add Remote had no handler).
+  - Added (user request): Changes › Discard All Changes (Changes group, panel's discard prompt); Branch › Delete Remote
+    Branch… (remote branches minus the current upstream, `git push <remote> :<branch>`: Zed's `delete_branch(is_remote)`
+    is `git branch -dr`, which only drops the local remote-tracking ref).
+  - Merge message race fixed: Zed's scan emits `StatusesChanged` only when statuses / conflicts change, so when
+    `git merge` wrote MERGE_MSG after the index the panel missed it, then prefilled the stale message after the
+    commit and the main button stayed "Commit" (second commit → error). Now: the scan also emits on a merge message
+    change (upstream touch), and the panel rescans after its merge and after each commit (VS Code refreshes after its
+    own operations, `repository.ts` `_updateModelState`). Commit errors are logged (`bolt_scm: git commit failed`).
+  - Kept Zed's: Checkout to…, Rename Branch, Stash/Stash Staged/Include Untracked (message modal), Apply/Pop Latest,
+    Stage/Unstage All, Undo Last Commit (Zed asks only if the commit was pushed; VS Code asks only for merge commits),
+    Clone, Worktrees.
 - ✅ SCM and search rows: row actions are rendered only for the hovered row (`hovered_row` + `on_hover`), so names are
   not cut. Gotcha: toggling `display` with `group_hover` styles panics in GPUI ("must call prepaint before paint").
 - ✅ Vue `<script>` indentation (user request 2026-10-15, ESLint `vue/script-indent` `baseIndent: 1`, verified by the
@@ -267,6 +286,8 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `assets/settings/default.json` (UI) | `ui_font_family: .SystemUIFont`; `project_panel.folder_indicator: both`, `hide_root: true` | like VS Code/Cursor |
 | `crates/install_cli/src/install_cli_binary.rs`, `crates/cli/src/main.rs` | CLI installed as `/usr/local/bin/bolt` (never replaces Zed's `zed`), clap name `bolt` | `bolt ./folder` |
 | `crates/zed/src/main.rs`, `Cargo.toml`, `crates/zed/Cargo.toml` | `bolt_iconify` crate wiring | Iconify |
+| `crates/project/src/git_store.rs` (merge) | `compute_snapshot` also emits `StatusesChanged` when only the merge message changes | merge message prefill raced with `git merge` |
+| `crates/settings_content/src/extension.rs` | `ExtensionSettingsContent`: `Default` derived instead of the manual impl | clippy `derivable_impls` after `suggest_extensions` became `Option` |
 | `crates/git_ui/src/git_ui.rs` | `pub fn bolt_panel_enabled` | read the switch from bolt_scm |
 | `crates/git_ui/src/git_panel.rs` | `GitStatusEntry::bolt_new`; `icon()` hidden when `bolt_panel` | single-file diff from bolt_scm; Zed panel stays loaded (its workspace git actions need it) but buttonless |
 | `assets/keymaps/default-macos.json` (scm) | `ctrl-shift-g` → `bolt_scm::ToggleFocus`; `BoltScmCommit > Editor`: enter / cmd-enter → `bolt_scm::Commit` | shortcuts |

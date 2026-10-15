@@ -12946,7 +12946,12 @@ async fn compute_snapshot(
     log::debug!("new merge details: {merge_details:?}");
 
     this.update(cx, |this, cx| {
-        if conflicts_changed || statuses_by_path != this.snapshot.statuses_by_path {
+        // BOLT: also when only the merge message changes. `git merge` writes MERGE_MSG after the index, so a scan can
+        // see the new statuses before it and the next one would update `merge` without any event.
+        if conflicts_changed
+            || statuses_by_path != this.snapshot.statuses_by_path
+            || merge_details.message != this.snapshot.merge.message
+        {
             cx.emit(RepositoryEvent::StatusesChanged);
         }
         if stash_entries != this.snapshot.stash_entries {

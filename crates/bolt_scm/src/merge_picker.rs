@@ -1,12 +1,15 @@
 //! BOLT: branch pickers of the source control panel.
 //! - "Merge Branch…" runs `git merge --no-commit --no-ff <branch>` (the command behind the user's `branch:merge` alias)
 //!   into the current branch, leaving the result uncommitted for review.
-//! - "Create Branch From…" picks a base branch, then asks for the new branch name (`git switch -c <name> <base>`).
+//! - "Create Branch From…" picks a base branch, then asks for the new branch name; "Create Branch…" asks for the name
+//!   and branches from HEAD (`git checkout -q -b <name> --no-track <base>`, VS Code's `git.branch` / `git.branchFrom`).
+//! - "Delete Branch…" picks a local branch other than the current one (VS Code's `git.deleteBranch`); "Delete Remote
+//!   Branch…" a remote branch other than the current upstream (`git.deleteRemoteBranch`).
 
 use std::sync::Arc;
 
 use git::repository::Branch;
-use gpui::{App, Context, Entity, SharedString, Task, WeakEntity, Window};
+use gpui::{App, Context, Entity, PromptLevel, SharedString, Task, WeakEntity, Window};
 use picker::{Picker, PickerDelegate};
 use project::git_store::Repository;
 use ui::{HighlightedLabel, ListItem, ListItemSpacing, prelude::*};
@@ -16,6 +19,8 @@ use workspace::{Toast, Workspace, notifications::NotificationId};
 pub(crate) enum Mode {
     Merge,
     CreateFrom,
+    Delete,
+    DeleteRemote,
 }
 
 pub(crate) fn open(
@@ -27,11 +32,26 @@ pub(crate) fn open(
     let Some(repository) = workspace.project().read(cx).active_repository(cx) else {
         return;
     };
+    let upstream = repository
+        .read(cx)
+        .branch
+        .as_ref()
+        .and_then(|branch| branch.upstream.as_ref())
+        .map(|upstream| upstream.ref_name.clone());
     let mut branches: Vec<Branch> = repository
         .read(cx)
         .branch_list
         .iter()
-        .filter(|branch| mode == Mode::CreateFrom || !branch.is_head)
+        .filter(|branch| match mode {
+            Mode::Merge => !branch.is_head,
+            Mode::CreateFrom => true,
+            Mode::Delete => !branch.is_head && !branch.is_remote(),
+            Mode::DeleteRemote => {
+                branch.is_remote()
+                    && !branch.name().ends_with("/HEAD")
+                    && upstream.as_ref() != Some(&branch.ref_name)
+            }
+        })
         .cloned()
         .collect();
     // VS Code's default `git.branchSortOrder` (`committerdate`): most recent commit first.
@@ -100,6 +120,8 @@ impl PickerDelegate for MergePickerDelegate {
                 format!("Select a branch to merge into \"{current}\"").into()
             }
             (Mode::Merge, None) => "Select a branch to merge".into(),
+            (Mode::Delete, _) => "Select a branch to delete".into(),
+            (Mode::DeleteRemote, _) => "Select a remote branch to delete".into(),
         }
     }
 
@@ -150,27 +172,36 @@ impl PickerDelegate for MergePickerDelegate {
             ),
             Mode::CreateFrom => {
                 let workspace = self.workspace.clone();
-                let repository = self.repository.clone();
                 window.defer(cx, move |window, cx| {
                     workspace
                         .update(cx, |workspace, cx| {
-                            let weak_workspace = workspace.weak_handle();
-                            workspace.toggle_modal(window, cx, |window, cx| {
-                                Picker::uniform_list(
-                                    NewBranchNameDelegate {
-                                        workspace: weak_workspace,
-                                        repository,
-                                        base: branch_name.into(),
-                                        name: String::new(),
-                                    },
-                                    window,
-                                    cx,
-                                )
-                            });
+                            open_name_picker(workspace, branch_name.into(), window, cx)
                         })
                         .ok();
                 });
             }
+            Mode::DeleteRemote => {
+                let Some((remote, name)) = branch_name.split_once('/') else {
+                    return;
+                };
+                let (remote, name) = (remote.to_string(), name.to_string());
+                if let Some(panel) = self
+                    .workspace
+                    .upgrade()
+                    .and_then(|workspace| workspace.read(cx).panel::<crate::ScmPanel>(cx))
+                {
+                    panel.update(cx, |panel, cx| {
+                        panel.delete_remote_branch(remote, name, window, cx)
+                    });
+                }
+            }
+            Mode::Delete => delete_branch(
+                self.workspace.clone(),
+                self.repository.clone(),
+                branch_name,
+                window,
+                cx,
+            ),
         }
         cx.emit(gpui::DismissEvent);
     }
@@ -234,6 +265,101 @@ impl PickerDelegate for MergePickerDelegate {
     }
 }
 
+/// "Create Branch…": the new branch starts at HEAD.
+pub(crate) fn open_new_branch_name(
+    workspace: &mut Workspace,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
+    open_name_picker(workspace, "HEAD".into(), window, cx);
+}
+
+fn open_name_picker(
+    workspace: &mut Workspace,
+    base: SharedString,
+    window: &mut Window,
+    cx: &mut Context<Workspace>,
+) {
+    let Some(repository) = workspace.project().read(cx).active_repository(cx) else {
+        return;
+    };
+    let existing = repository
+        .read(cx)
+        .branch_list
+        .iter()
+        .filter(|branch| !branch.is_remote())
+        .map(|branch| branch.name().to_string())
+        .collect();
+    let weak_workspace = workspace.weak_handle();
+    workspace.toggle_modal(window, cx, |window, cx| {
+        Picker::uniform_list(
+            NewBranchNameDelegate {
+                workspace: weak_workspace,
+                repository,
+                base,
+                existing,
+                name: String::new(),
+            },
+            window,
+            cx,
+        )
+    });
+}
+
+/// `git branch -d <branch>`; when git refuses because the branch is not fully merged, asks like VS Code and retries
+/// with `-D`.
+fn delete_branch(
+    workspace: WeakEntity<Workspace>,
+    repository: Entity<Repository>,
+    branch: String,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    window
+        .spawn(cx, async move |cx| {
+            let delete = repository.update(cx, |repository, _| {
+                repository.delete_branch(false, branch.clone(), false)
+            });
+            let mut result = delete.await?;
+            if let Err(error) = &result
+                && error.to_string().contains("not fully merged")
+            {
+                let answer = cx.update(|window, cx| {
+                    window.prompt(
+                        PromptLevel::Warning,
+                        &format!("The branch \"{branch}\" is not fully merged. Delete anyway?"),
+                        None,
+                        &["Delete Branch", "Cancel"],
+                        cx,
+                    )
+                })?;
+                if answer.await != Ok(0) {
+                    return anyhow::Ok(());
+                }
+                let force = repository.update(cx, |repository, _| {
+                    repository.delete_branch(false, branch.clone(), true)
+                });
+                result = force.await?;
+            }
+            cx.update(|_, cx| {
+                repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
+                if let Err(error) = result {
+                    log::error!("bolt_scm: git branch -d {branch} failed: {error:?}");
+                    if let Some(workspace) = workspace.upgrade() {
+                        git_ui_core::notifications::show_error_toast(
+                            workspace,
+                            "delete branch",
+                            error,
+                            cx,
+                        );
+                    }
+                }
+            })?;
+            anyhow::Ok(())
+        })
+        .detach_and_log_err(cx);
+}
+
 /// Runs `git merge --no-commit --no-ff <branch>` in the repository and reports the outcome.
 pub(crate) fn merge_no_commit(
     workspace: WeakEntity<Workspace>,
@@ -260,6 +386,9 @@ pub(crate) fn merge_no_commit(
     window
         .spawn(cx, async move |cx| {
             let result = output.await;
+            // Like VS Code, which refreshes the repository state after its own git operations: Zed's watcher may scan
+            // before git writes MERGE_MSG, leaving the merge message unseen.
+            repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
             workspace.update(cx, |workspace, cx| {
                 let message = match result {
                     Ok((branch, output)) if output.status.success() => format!(
@@ -307,12 +436,24 @@ pub(crate) fn relative_time(timestamp: i64) -> String {
     format!("{value} {unit}{} ago", if value == 1 { "" } else { "s" })
 }
 
-/// Second step of "Create Branch From…": the query is the new branch name.
+/// Name step of "Create Branch…" / "Create Branch From…": the query is the new branch name.
 struct NewBranchNameDelegate {
     workspace: WeakEntity<Workspace>,
     repository: Entity<Repository>,
     base: SharedString,
+    /// Local branch names, for VS Code's `Branch "<name>" already exists` validation.
+    existing: Vec<String>,
     name: String,
+}
+
+impl NewBranchNameDelegate {
+    fn sanitized_name(&self) -> String {
+        self.name.trim().replace(' ', "-")
+    }
+
+    fn already_exists(&self) -> bool {
+        self.existing.contains(&self.sanitized_name())
+    }
 }
 
 impl PickerDelegate for NewBranchNameDelegate {
@@ -333,7 +474,7 @@ impl PickerDelegate for NewBranchNameDelegate {
     fn set_selected_index(&mut self, _: usize, _: &mut Window, _: &mut Context<Picker<Self>>) {}
 
     fn placeholder_text(&self, _: &mut Window, _: &mut App) -> Arc<str> {
-        format!("New branch name (from \"{}\")", self.base).into()
+        format!("Branch name (from \"{}\")", self.base).into()
     }
 
     fn update_matches(
@@ -348,8 +489,8 @@ impl PickerDelegate for NewBranchNameDelegate {
     }
 
     fn confirm(&mut self, _: bool, _: &mut Window, cx: &mut Context<Picker<Self>>) {
-        let name = self.name.trim().replace(' ', "-");
-        if name.is_empty() {
+        let name = self.sanitized_name();
+        if name.is_empty() || self.already_exists() {
             return;
         }
         // Same command as VS Code's "Create Branch From…": `--no-track`, so a branch created from `origin/main` has no
@@ -402,7 +543,12 @@ impl PickerDelegate for NewBranchNameDelegate {
         _: &mut Window,
         _: &mut Context<Picker<Self>>,
     ) -> Option<Self::ListItem> {
-        let name = self.name.trim().replace(' ', "-");
+        let name = self.sanitized_name();
+        let label = if self.already_exists() {
+            format!("Branch \"{name}\" already exists")
+        } else {
+            format!("Create branch \"{name}\" from \"{}\"", self.base)
+        };
         Some(
             ListItem::new(("bolt-new-branch", ix))
                 .inset(true)
@@ -413,10 +559,7 @@ impl PickerDelegate for NewBranchNameDelegate {
                         .size(IconSize::Small)
                         .color(Color::Muted),
                 )
-                .child(Label::new(format!(
-                    "Create branch \"{name}\" from \"{}\"",
-                    self.base
-                ))),
+                .child(Label::new(label)),
         )
     }
 }
