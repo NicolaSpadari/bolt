@@ -12,6 +12,11 @@ default-run = "bolt" # BOLT
 workspace = true
 
 [features]
+# BOLT: subsystems switched off in Bolt are left out of the build unless their feature is enabled (smaller binary,
+# faster cold builds). The wiring in main.rs / zed.rs is behind `#[cfg(feature = "…")]`.
+default = []
+repl = ["dep:repl"]
+debugger = ["dep:dap_adapters", "dep:debug_adapter_extension", "dep:debugger_tools", "dep:debugger_ui"]
 tracy = ["ztracing/tracy"]
 # LEAK_BACKTRACE=1 cargo run --features zed/track-project-leak --profile release-fast
 track-project-leak = ["gpui/leak-detection"]
@@ -100,11 +105,11 @@ copilot.workspace = true
 copilot_chat.workspace = true
 copilot_ui.workspace = true
 crashes.workspace = true
-dap_adapters.workspace = true
+dap_adapters = { workspace = true, optional = true } # BOLT: feature
 db.workspace = true
-debug_adapter_extension.workspace = true
-debugger_tools.workspace = true
-debugger_ui.workspace = true
+debug_adapter_extension = { workspace = true, optional = true } # BOLT: feature
+debugger_tools = { workspace = true, optional = true } # BOLT: feature
+debugger_ui = { workspace = true, optional = true } # BOLT: feature
 dev_container.workspace = true
 diagnostics.workspace = true
 editor.workspace = true
@@ -190,7 +195,7 @@ proto.workspace = true
 recent_projects.workspace = true
 release_channel.workspace = true
 remote.workspace = true
-repl.workspace = true
+repl = { workspace = true, optional = true } # BOLT: feature
 reqwest.workspace = true
 reqwest_client.workspace = true
 rope.workspace = true
@@ -284,6 +289,8 @@ image.workspace = true
 agent_ui = { workspace = true, features = ["test-support"] }
 search = { workspace = true, features = ["test-support"] }
 repl = { workspace = true, features = ["test-support"] }
+# BOLT: optional in [dependencies], always available to the tests.
+debugger_ui.workspace = true
 
 
 [package.metadata.bundle-dev]

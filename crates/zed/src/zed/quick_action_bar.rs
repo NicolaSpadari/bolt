@@ -1,4 +1,6 @@
 mod preview;
+// BOLT: REPL only with its Cargo feature.
+#[cfg(feature = "repl")]
 mod repl_menu;
 
 use agent_settings::AgentSettings;
@@ -706,7 +708,13 @@ impl Render for QuickActionBar {
         h_flex()
             .id("quick action bar")
             .gap(DynamicSpacing::Base01.rems(cx))
-            .children(self.render_repl_menu(cx))
+            .children({
+                #[cfg(feature = "repl")]
+                let repl_menu = self.render_repl_menu(cx);
+                #[cfg(not(feature = "repl"))]
+                let repl_menu: Option<AnyElement> = None;
+                repl_menu
+            })
             .children(self.render_preview_button(cx))
             .children(search_button)
             .when(

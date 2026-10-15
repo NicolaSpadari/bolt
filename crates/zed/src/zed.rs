@@ -1489,8 +1489,12 @@ fn initialize_pane(
             toolbar.add_item(project_search_bar, window, cx);
             let lsp_log_item = cx.new(|_| LspLogToolbarItemView::new());
             toolbar.add_item(lsp_log_item, window, cx);
-            let dap_log_item = cx.new(|_| debugger_tools::DapLogToolbarItemView::new());
-            toolbar.add_item(dap_log_item, window, cx);
+            // BOLT: debugger only with its Cargo feature.
+            #[cfg(feature = "debugger")]
+            {
+                let dap_log_item = cx.new(|_| debugger_tools::DapLogToolbarItemView::new());
+                toolbar.add_item(dap_log_item, window, cx);
+            }
             let acp_tools_item = cx.new(|_| acp_tools::AcpToolsToolbarItemView::new());
             toolbar.add_item(acp_tools_item, window, cx);
             let telemetry_log_item =
@@ -2352,32 +2356,42 @@ pub fn load_default_keymap(cx: &mut App) {
     }
 
     cx.bind_keys(filter_disabled_ai_bindings(
-        KeymapFile::load_asset(DEFAULT_KEYMAP_PATH, Some(KeybindSource::Default), cx).unwrap(),
+        bolt_load_keymap_asset(DEFAULT_KEYMAP_PATH, KeybindSource::Default, cx),
         cx,
     ));
 
     if let Some(asset_path) = base_keymap.asset_path() {
         cx.bind_keys(filter_disabled_ai_bindings(
-            KeymapFile::load_asset(asset_path, Some(KeybindSource::Base), cx).unwrap(),
+            bolt_load_keymap_asset(asset_path, KeybindSource::Base, cx),
             cx,
         ));
     }
 
     if VimModeSetting::get_global(cx).0 || vim_mode_setting::HelixModeSetting::get_global(cx).0 {
         cx.bind_keys(filter_disabled_ai_bindings(
-            KeymapFile::load_asset(VIM_KEYMAP_PATH, Some(KeybindSource::Vim), cx).unwrap(),
+            bolt_load_keymap_asset(VIM_KEYMAP_PATH, KeybindSource::Vim, cx),
             cx,
         ));
     }
 
-    cx.bind_keys(
-        KeymapFile::load_asset(
-            SPECIFIC_OVERRIDES_KEYMAP_PATH,
-            Some(KeybindSource::Default),
-            cx,
-        )
-        .unwrap(),
-    );
+    cx.bind_keys(bolt_load_keymap_asset(
+        SPECIFIC_OVERRIDES_KEYMAP_PATH,
+        KeybindSource::Default,
+        cx,
+    ));
+}
+
+// BOLT: the built-in keymaps bind actions of subsystems left out of the build (`zed` Cargo features `repl` /
+// `debugger`). Upstream's `load_asset(...).unwrap()` panics on those; the bindings that fail to load are skipped.
+fn bolt_load_keymap_asset(asset_path: &str, source: KeybindSource, cx: &App) -> Vec<KeyBinding> {
+    let mut key_bindings = KeymapFile::load_asset_allow_partial_failure(asset_path, cx)
+        .context("loading a built-in keymap")
+        .log_err()
+        .unwrap_or_default();
+    for key_binding in &mut key_bindings {
+        key_binding.set_meta(source.meta());
+    }
+    key_bindings
 }
 
 /// Namespaces of actions that are part of an AI feature. When the user opts out

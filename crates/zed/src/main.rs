@@ -558,6 +558,7 @@ fn main() {
 
         let node_runtime = NodeRuntime::new(client.http_client(), Some(shell_env_loaded_rx), rx);
 
+        #[cfg(feature = "debugger")]
         debug_adapter_extension::init(extension_host_proxy.clone(), cx);
         languages::init(languages.clone(), fs.clone(), node_runtime.clone(), cx);
         let user_store = cx.new(|cx| UserStore::new(client.clone(), cx));
@@ -588,7 +589,10 @@ fn main() {
         #[cfg(target_os = "macos")]
         zed::move_to_applications::init(cx);
         project::Project::init(&client, cx);
+        // BOLT: debugger and REPL only with their Cargo features.
+        #[cfg(feature = "debugger")]
         debugger_ui::init(cx);
+        #[cfg(feature = "debugger")]
         debugger_tools::init(cx);
         client::init(&client, cx);
         feature_flags::FeatureFlagStore::init(cx);
@@ -656,6 +660,7 @@ fn main() {
 
         watcher_debug::init(app_state.clone(), cx);
         auto_update::init(client.clone(), cx);
+        #[cfg(feature = "debugger")]
         dap_adapters::init(cx);
         auto_update_ui::init(cx);
         reliability::init(client.clone(), app_state.workspace_store.clone(), cx);
@@ -722,6 +727,7 @@ fn main() {
         );
         zed::watch_user_agents_md(app_state.fs.clone(), cx);
 
+        #[cfg(feature = "repl")]
         repl::init(app_state.fs.clone(), cx);
         recent_projects::init(cx);
         dev_container::init(cx);
@@ -732,6 +738,7 @@ fn main() {
 
         editor::init(cx);
         image_viewer::init(cx);
+        #[cfg(feature = "repl")]
         repl::notebook::init(cx);
         diagnostics::init(cx);
 
