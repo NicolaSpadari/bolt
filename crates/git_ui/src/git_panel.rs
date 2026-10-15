@@ -1230,7 +1230,8 @@ impl From<&Arc<InitialGraphCommitData>> for CommitHistoryEntry {
 
 const MAX_PANEL_EDITOR_LINES: usize = 6;
 
-pub(crate) fn commit_message_editor(
+// BOLT: pub, reused by bolt_scm's commit input.
+pub fn commit_message_editor(
     commit_message_buffer: Entity<Buffer>,
     placeholder: Option<SharedString>,
     project: Entity<Project>,
@@ -9576,7 +9577,8 @@ pub fn panel_editor_container(_window: &mut Window, cx: &mut App) -> Div {
         .bg(cx.theme().colors().editor_background)
 }
 
-pub(crate) fn git_commit_editor_style(font_size: gpui::Pixels, cx: &App) -> EditorStyle {
+// BOLT: pub, reused by bolt_scm's commit input.
+pub fn git_commit_editor_style(font_size: gpui::Pixels, cx: &App) -> EditorStyle {
     let settings = ThemeSettings::get_global(cx);
 
     EditorStyle {

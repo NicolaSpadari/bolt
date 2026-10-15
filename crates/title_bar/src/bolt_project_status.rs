@@ -147,7 +147,14 @@ fn render_sync_button(
                         },
                     ),
             )
-            .tooltip(Tooltip::text("Synchronize Changes"))
+            .tooltip(Tooltip::text(sync_tooltip(
+                upstream.remote_name().unwrap_or_default(),
+                upstream.branch_name().unwrap_or_default(),
+                upstream
+                    .tracking
+                    .status()
+                    .map(|status| (status.behind, status.ahead)),
+            )))
             .on_click(|_, window, cx| window.dispatch_action(bolt_scm::Sync.boxed_clone(), cx)),
         None => ButtonLike::new("bolt-publish-branch")
             .child(
@@ -161,6 +168,21 @@ fn render_sync_button(
             }),
     };
     Some(button.into_any_element())
+}
+
+/// VS Code's `Repository.syncTooltip`.
+fn sync_tooltip(remote: &str, branch: &str, behind_ahead: Option<(u32, u32)>) -> String {
+    let Some((behind, ahead)) = behind_ahead.filter(|&(behind, ahead)| behind > 0 || ahead > 0)
+    else {
+        return "Synchronize Changes".to_string();
+    };
+    if ahead == 0 {
+        format!("Pull {behind} commits from {remote}/{branch}")
+    } else if behind == 0 {
+        format!("Push {ahead} commits to {remote}/{branch}")
+    } else {
+        format!("Pull {behind} and push {ahead} commits between {remote}/{branch}")
+    }
 }
 
 /// Converts a git remote (`git@host:owner/repo.git`, `ssh://git@host/owner/repo`, `https://host/owner/repo.git`) to

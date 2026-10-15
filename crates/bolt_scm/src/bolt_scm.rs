@@ -9,7 +9,7 @@
 mod merge_picker;
 mod stash_picker;
 
-use std::ops::Range;
+use std::{ops::Range, path::Path, sync::Arc};
 
 use anyhow::Result;
 use askpass::AskPassDelegate;
@@ -31,14 +31,15 @@ use git_ui_core::{askpass_modal::AskPassModal, notifications::show_error_toast};
 use gpui::{
     Action, AnyElement, App, AsyncWindowContext, ClickEvent, Context, Entity, EventEmitter,
     FocusHandle, Focusable, KeyContext, Pixels, PromptLevel, Render, SharedString, Subscription,
-    Task, TextStyle, UniformListScrollHandle, WeakEntity, Window, actions, px, relative, rems,
-    uniform_list,
+    Task, UniformListScrollHandle, WeakEntity, Window, actions, px, uniform_list,
 };
-use multi_buffer::MultiBuffer;
 use notifications::status_toast::StatusToast;
 use project::{
     Project,
-    git_store::{GitStoreEvent, Repository, RepositoryEvent},
+    git_store::{
+        GitStoreEvent, Repository, RepositoryEvent,
+        pending_op::{GitStatus, JobStatus},
+    },
 };
 use settings::Settings as _;
 use settings::StatusStyle;
@@ -379,14 +380,22 @@ impl ScmPanel {
             this.update_in(cx, |this, window, cx| {
                 let project = this.project.clone();
                 let editor = cx.new(|cx| {
-                    let multi_buffer = cx.new(|cx| MultiBuffer::singleton(buffer, cx));
-                    Editor::new(
-                        EditorMode::SingleLine,
-                        multi_buffer,
-                        Some(project),
+                    // Zed's git panel editor (no autoclose, Cut / Copy / Paste menu), growing like VS Code's SCM
+                    // input: wraps, from `scm.inputMinLineCount` (1) to `scm.inputMaxLineCount` (10) lines, then
+                    // scrolls (`scmInput.ts` `getContentHeight`). Placeholder drawn by the panel.
+                    let mut editor = git_ui::git_panel::commit_message_editor(
+                        buffer,
+                        Some(SharedString::default()),
+                        project,
+                        true,
                         window,
                         cx,
-                    )
+                    );
+                    editor.set_mode(EditorMode::AutoHeight {
+                        min_lines: 1,
+                        max_lines: Some(10),
+                    });
+                    editor
                 });
                 // The main button switches between Commit and Sync / Publish as the message is typed.
                 this._commit_editor_subscription =
@@ -526,10 +535,26 @@ impl ScmPanel {
                     continue;
                 }
                 let staging = status_entry.status.staging();
-                if staging.has_staged() {
+                let (mut in_staged, mut in_changes) =
+                    (staging.has_staged(), staging.has_unstaged());
+                // VS Code's `git.optimisticUpdate`: a finished stage / unstage / revert moves the row right away,
+                // before the status scan confirms it.
+                if let Some(op) = repository
+                    .pending_ops_for_path(&status_entry.repo_path)
+                    .and_then(|ops| ops.ops.last().copied())
+                    .filter(|op| op.job_status == JobStatus::Finished)
+                {
+                    match op.git_status {
+                        GitStatus::Staged => (in_staged, in_changes) = (true, false),
+                        GitStatus::Unstaged => (in_staged, in_changes) = (false, true),
+                        GitStatus::Reverted => (in_staged, in_changes) = (false, false),
+                        GitStatus::Unchanged => {}
+                    }
+                }
+                if in_staged {
                     staged.push(entry.clone());
                 }
-                if staging.has_unstaged() {
+                if in_changes {
                     changes.push(entry);
                 }
             }
@@ -587,23 +612,6 @@ impl ScmPanel {
             .any(|section| section.kind == SectionKind::Staged && !section.entries.is_empty())
     }
 
-    fn report<T: 'static>(
-        &self,
-        operation: &'static str,
-        task: Task<Result<T>>,
-        cx: &mut Context<Self>,
-    ) {
-        let workspace = self.workspace.clone();
-        cx.spawn(async move |_, cx| {
-            if let Err(error) = task.await
-                && let Some(workspace) = workspace.upgrade()
-            {
-                cx.update(|cx| show_error_toast(workspace, operation, error, cx));
-            }
-        })
-        .detach();
-    }
-
     fn stage(&mut self, paths: Vec<RepoPath>, stage: bool, cx: &mut Context<Self>) {
         let Some(repository) = self.repository.clone() else {
             return;
@@ -618,7 +626,26 @@ impl ScmPanel {
                 repository.unstage_entries(paths, cx)
             }
         });
-        self.report(if stage { "stage" } else { "unstage" }, task, cx);
+        let operation = if stage { "stage" } else { "unstage" };
+        let workspace = self.workspace.clone();
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            this.update(cx, |this, cx| this.refresh_after_operation(&repository, cx))
+                .log_err();
+            if let Err(error) = result
+                && let Some(workspace) = workspace.upgrade()
+            {
+                cx.update(|cx| show_error_toast(workspace, operation, error, cx));
+            }
+        })
+        .detach();
+    }
+
+    /// Like VS Code's `Repository.run`: right after its own operation, show the optimistic state and re-read the
+    /// status, instead of waiting for the file watcher to notice the index change.
+    fn refresh_after_operation(&mut self, repository: &Entity<Repository>, cx: &mut Context<Self>) {
+        self.update_sections(cx);
+        repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
     }
 
     fn section_paths(&self, kind: SectionKind) -> Vec<RepoPath> {
@@ -657,7 +684,7 @@ impl ScmPanel {
         );
         let project = self.project.clone();
         let workspace = self.workspace.clone();
-        cx.spawn(async move |_, cx| {
+        cx.spawn(async move |this, cx| {
             if prompt.await != Ok(0) {
                 return;
             }
@@ -688,6 +715,8 @@ impl ScmPanel {
                 Ok(())
             }
             .await;
+            this.update(cx, |this, cx| this.refresh_after_operation(&repository, cx))
+                .log_err();
             if let Err(error) = result
                 && let Some(workspace) = workspace.upgrade()
             {
@@ -1017,6 +1046,10 @@ impl ScmPanel {
         let pull_branch = branch.upstream.is_none().then(|| branch_name.clone());
         let pull_askpass = pull.then(|| self.askpass("git pull", window, cx));
         let push_askpass = push.then(|| self.askpass("git push", window, cx));
+        // VS Code's `_sync` pushes only when HEAD is ahead after the pull (`shouldPush`), counted after the pull:
+        // the snapshot may predate a commit just made (Commit & Sync) or the pull itself.
+        let check_ahead = operation == RemoteOperation::Sync && tracked_upstream.is_some();
+        let work_directory = repository.read(cx).work_directory_abs_path.clone();
 
         self.pending_remote = Some(operation);
         cx.notify();
@@ -1045,6 +1078,7 @@ impl ScmPanel {
                 let remote = Remote {
                     name: remote_name.clone(),
                 };
+                let mut pull_output = None;
                 if let Some(askpass) = pull_askpass {
                     log::info!("bolt_scm: git pull {remote_name}");
                     let output = repository
@@ -1052,11 +1086,22 @@ impl ScmPanel {
                             repository.pull(pull_branch, remote_name.clone(), rebase, askpass, cx)
                         })
                         .await??;
-                    if !push {
-                        this.update(cx, |this, cx| {
-                            this.show_remote_output(RemoteAction::Pull(remote.clone()), output, cx)
-                        })?;
+                    pull_output = Some(output);
+                }
+                let push_askpass = match push_askpass {
+                    Some(askpass) if check_ahead => {
+                        let ahead = commits_ahead_of_upstream(work_directory, cx).await;
+                        log::info!("bolt_scm: sync, ahead of upstream after pull: {ahead:?}");
+                        ahead.is_none_or(|ahead| ahead > 0).then_some(askpass)
                     }
+                    askpass => askpass,
+                };
+                if push_askpass.is_none()
+                    && let Some(output) = pull_output
+                {
+                    this.update(cx, |this, cx| {
+                        this.show_remote_output(RemoteAction::Pull(remote.clone()), output, cx)
+                    })?;
                 }
                 if let Some(askpass) = push_askpass {
                     log::info!("bolt_scm: git push {remote_name} {branch_name}:{remote_branch}");
@@ -1242,7 +1287,8 @@ impl ScmPanel {
             return;
         }
         let detail = if count == 1 {
-            "There is 1 stash that will be subject to pruning, and MAY BE IMPOSSIBLE TO RECOVER.".to_string()
+            "There is 1 stash that will be subject to pruning, and MAY BE IMPOSSIBLE TO RECOVER."
+                .to_string()
         } else {
             format!(
                 "There are {count} stashes that will be subject to pruning, and MAY BE IMPOSSIBLE TO RECOVER."
@@ -1476,8 +1522,9 @@ impl ScmPanel {
                 div()
                     .key_context("BoltScmCommit")
                     .w_full()
-                    .h(px(26.))
+                    .min_h(px(26.))
                     .px_1p5()
+                    .py_1()
                     .flex()
                     .items_center()
                     .rounded_sm()
@@ -1506,7 +1553,12 @@ impl ScmPanel {
                                 .items_center()
                                 .child(
                                     Label::new(self.placeholder(cx))
-                                        .size(LabelSize::Custom(rems(0.8125)))
+                                        .buffer_font(cx)
+                                        .size(LabelSize::Custom(rems_from_px(
+                                            ThemeSettings::get_global(cx)
+                                                .git_commit_buffer_font_size(cx)
+                                                .as_f32(),
+                                        )))
                                         .color(Color::Placeholder)
                                         .truncate(),
                                 ),
@@ -1897,25 +1949,34 @@ impl ScmPanel {
     }
 }
 
-/// UI font at VS Code's input size (13px), so the commit message input matches the panel text.
-fn commit_input_style(cx: &App) -> EditorStyle {
-    let settings = ThemeSettings::get_global(cx);
-    EditorStyle {
-        background: cx.theme().colors().editor_background,
-        local_player: cx.theme().players().local(),
-        text: TextStyle {
-            color: cx.theme().colors().text,
-            font_family: settings.ui_font.family.clone(),
-            font_features: settings.ui_font.features.clone(),
-            font_fallbacks: settings.ui_font.fallbacks.clone(),
-            font_size: rems(0.8125).into(),
-            font_weight: settings.ui_font.weight,
-            line_height: relative(1.3),
-            ..TextStyle::default()
-        },
-        syntax: cx.theme().syntax().clone(),
-        ..EditorStyle::default()
+/// `git rev-list --count @{upstream}..HEAD`; `None` when git can't tell (VS Code then pushes anyway).
+async fn commits_ahead_of_upstream(
+    work_directory: Arc<Path>,
+    cx: &mut AsyncWindowContext,
+) -> Option<u32> {
+    let output = cx
+        .background_spawn(async move {
+            util::command::new_command("git")
+                .args(["rev-list", "--count", "@{upstream}..HEAD"])
+                .current_dir(work_directory.as_ref())
+                .output()
+                .await
+        })
+        .await
+        .log_err()?;
+    if !output.status.success() {
+        return None;
     }
+    String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .parse()
+        .log_err()
+}
+
+/// Zed's git panel commit editor style (buffer font, `git_commit_buffer_font_size`).
+fn commit_input_style(cx: &App) -> EditorStyle {
+    let font_size = ThemeSettings::get_global(cx).git_commit_buffer_font_size(cx);
+    git_ui::git_panel::git_commit_editor_style(font_size, cx)
 }
 
 impl Render for ScmPanel {

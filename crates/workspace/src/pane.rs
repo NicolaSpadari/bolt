@@ -4595,7 +4595,6 @@ impl Render for Pane {
                 pane.child((self.render_tab_bar.clone())(self, window, cx))
             })
             .child({
-                let has_worktrees = project.read(cx).visible_worktrees(cx).next().is_some();
                 // main content
                 div()
                     .flex_1()
@@ -4631,7 +4630,9 @@ impl Render for Pane {
                                         }
                                     },
                                 ));
-                            if has_worktrees || !self.should_display_welcome_page {
+                            // BOLT: the welcome page also when a project is open and no tab is (VS Code's empty
+                            // editor area); Zed showed it only without worktrees.
+                            if !self.should_display_welcome_page {
                                 placeholder
                             } else {
                                 if self.welcome_page.is_none() {

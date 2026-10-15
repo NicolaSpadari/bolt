@@ -501,6 +501,8 @@ impl TerminalPanel {
                         };
                         let new_pane =
                             new_terminal_pane(self.workspace.clone(), project, false, window, cx);
+                        // BOLT: without this the moved pane kept Zed's default "New…" menu.
+                        self.apply_tab_bar_buttons(&new_pane, cx);
                         new_pane.update(cx, |pane, cx| {
                             pane.add_item(item, true, true, None, window, cx);
                         });

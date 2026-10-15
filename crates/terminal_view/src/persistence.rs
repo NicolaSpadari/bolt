@@ -160,6 +160,11 @@ pub(crate) fn deserialize_terminal_panel(
                         if let Some(focused_interim_pane) = focused_interim_pane {
                             terminal_panel.active_pane = focused_interim_pane;
                         }
+                        // BOLT: restored panes got their buttons only from agent_ui's
+                        // `set_assistant_enabled`, absent without the `ai` feature.
+                        for pane in terminal_panel.center.panes() {
+                            terminal_panel.apply_tab_bar_buttons(pane, cx);
+                        }
                         restored_items
                     })?
                 } else {

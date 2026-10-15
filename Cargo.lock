@@ -2363,7 +2363,6 @@ dependencies = [
  "gpui",
  "log",
  "menu",
- "multi_buffer",
  "notifications",
  "picker",
  "project",

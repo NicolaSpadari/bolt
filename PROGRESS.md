@@ -221,6 +221,35 @@ file is upstream's hottest (46 commits / 3 months).
   is not in Bolt.log); an excluded crate's `init` may also set up unrelated things (`collab_ui::init` initializes the
   title bar → without `collab` Bolt calls `title_bar::init` itself; missing title bar = no window drag, no footer
   project/branch): check what each gated `init` calls. `cargo test -p zed --no-run` must build without features.
+- 🚧 Terminal "+" was still a dropdown in some cases (user request 2026-10-15). Cause: panes restored at startup (and
+  MovePane splits) got the Bolt buttons only from agent_ui's `set_assistant_enabled`, not built without `ai`, so they
+  kept Zed's default "New…" menu. Now applied after restore and on split. Built, waiting for the user's check.
+- ✅ SCM stage / unstage / discard felt slow (user report 2026-10-15, backend repo). Not git: on cb-backend `git status`,
+  `for-each-ref` (1681 refs) etc. take ≤ 60 ms. Not the hit area (tooltip shows on hover). Cause: the panel rebuilt its
+  rows only on `StatusesChanged`, i.e. after `git add` → file watcher on `.git/index` (150–370 ms handling in Bolt.log)
+  → full repository scan. VS Code (`git.optimisticUpdate`, default true, `repository.ts` `run` /
+  `_updateModelState`) moves the rows as soon as the git command finishes, then re-reads the status right away. Now
+  the same: rows follow Zed's finished pending ops (`Staged` / `Unstaged` / `Reverted`, kept until the next scan), and
+  after stage / unstage / discard the panel refreshes and calls `bolt_rescan` without waiting for the watcher. Verified
+  by the user on cb-frontend (100 modified files).
+- 🚧 Footer sync "also pushed" (user report 2026-10-15). VS Code's status bar button is `git.sync` too (pull then
+  push), but `repository.ts` `_sync` pushes only when HEAD is still ahead after the pull (`shouldPush`); Bolt always
+  pushed (and showed only the push toast). Now: after the pull, `git rev-list --count @{upstream}..HEAD` (unknown →
+  push, like VS Code); no push → the pull toast. Footer tooltip = VS Code's `syncTooltip` ("Pull n commits from
+  origin/x", "Push m commits to …", "Pull n and push m commits between …"). Built, waiting for the user's check.
+- 🚧 SCM commit input wraps and grows like VS Code (`scmInput.ts` `getContentHeight`: word wrap on, height clamped to
+  `scm.inputMinLineCount` 1 … `scm.inputMaxLineCount` 10 lines, then scrolls): `EditorMode::AutoHeight { 1, 10 }`,
+  soft wrap from the "Git Commit" language (`editor_width`). Enter = new line, ⌘⏎ = commit (VS Code `scm.acceptInput`).
+  Look reused from Zed's git panel (user request): its `commit_message_editor` (no autoclose, Cut / Copy / Paste menu)
+  and `git_commit_editor_style` (buffer font, `git_commit_buffer_font_size`); the placeholder uses the same font.
+  Built, waiting for the user's check (user request 2026-10-15).
+- ✅ Branch pickers show `n↓ m↑` against each branch's upstream (user request 2026-10-15), from VS Code's
+  `BranchItem.description` (`commands.ts`: `behind↓ ahead↑`, then the date; used by checkout, merge, delete). Unlike
+  VS Code, zero counts are hidden (user: less clutter), nothing shown when in sync. Zed's branch switcher: next to the name (upstream touch); Bolt's Merge / Create From / Delete pickers:
+  between name and date. Data from Zed's `for-each-ref %(upstream:track)` (fresh after a fetch). Verified by the user.
+- 🚧 Empty editor area (project open, no tab): Zed's welcome page as is (Bolt logo, Get Started / Recent Projects,
+  same actions), like the screen of a new empty window; before it was blank (user request 2026-10-15, like VS Code /
+  Cursor's empty state). Built, waiting for the user's check.
 - Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
@@ -240,6 +269,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/settings_ui/src/page_data.rs` | `BOLT_HIDDEN_PAGES` filter (Debugger, Collaboration, AI) | settings UI |
 | `crates/recent_projects/src/recent_projects.rs` | "Open Remote Folder" button/menu hidden, `BOLT_SUGGEST_DEV_CONTAINERS = false` | remote dev |
 | `crates/workspace/src/dock.rs` | `PanelButtons::vertical()` (column, Medium icons, Large buttons, menu to the right) | activity bar |
+| `crates/workspace/src/pane.rs` (welcome) | welcome page also shown with worktrees (`should_display_welcome_page` only) | empty editor area like VS Code |
 | `crates/workspace/src/workspace.rs` | `activity_bar` field, `render_activity_bar` before the left dock (4 layouts), left dock buttons out of status bar, drag resize minus `BOLT_ACTIVITY_BAR_WIDTH` | VS Code-style activity bar |
 | `crates/title_bar/src/title_bar.rs` | `mod bolt_project_status`, status item registration in `init`, project items hidden in title bar | project name + branch in status bar |
 | `crates/workspace/src/dock.rs` (width) | left dock: `should_resize_all_panels` always true; on panel switch the new panel takes the current width | one shared, resizable sidebar width |
@@ -289,13 +319,14 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/project/src/git_store.rs` (merge) | `compute_snapshot` also emits `StatusesChanged` when only the merge message changes | merge message prefill raced with `git merge` |
 | `crates/settings_content/src/extension.rs` | `ExtensionSettingsContent`: `Default` derived instead of the manual impl | clippy `derivable_impls` after `suggest_extensions` became `Option` |
 | `crates/git_ui/src/git_ui.rs` | `pub fn bolt_panel_enabled` | read the switch from bolt_scm |
-| `crates/git_ui/src/git_panel.rs` | `GitStatusEntry::bolt_new`; `icon()` hidden when `bolt_panel` | single-file diff from bolt_scm; Zed panel stays loaded (its workspace git actions need it) but buttonless |
-| `assets/keymaps/default-macos.json` (scm) | `ctrl-shift-g` → `bolt_scm::ToggleFocus`; `BoltScmCommit > Editor`: enter / cmd-enter → `bolt_scm::Commit` | shortcuts |
+| `crates/git_ui/src/git_panel.rs` | `GitStatusEntry::bolt_new`; `icon()` hidden when `bolt_panel`; `commit_message_editor` / `git_commit_editor_style` `pub` | single-file diff from bolt_scm; Zed panel stays loaded (its workspace git actions need it) but buttonless |
+| `crates/git_ui/src/branch_picker.rs` | `n↓ m↑` next to each branch name (`render_match`) | VS Code's branch picker description |
+| `assets/keymaps/default-macos.json` (scm) | `ctrl-shift-g` → `bolt_scm::ToggleFocus`; `BoltScmCommit > Editor`: cmd-enter → `bolt_scm::Commit`, enter → `editor::Newline` (VS Code) | shortcuts |
 | `crates/title_bar/src/bolt_project_status.rs` (2) | folder icon before the footer project name; repo button (GitHub/GitLab/Bitbucket icon) opening the `origin` web page, hidden without a remote | user request |
 | `crates/git_ui/src/git_ui.rs` (scm 2) | `remote_output` module `pub` | push/pull/fetch toasts from bolt_scm |
 | `crates/git_ui/src/git_picker.rs` | "Create From…" button in the branch popover tab bar (action built by name: `bolt_scm` depends on `git_ui`) | VS Code "Create Branch From…" from the footer |
 | `crates/title_bar/Cargo.toml` | `bolt_scm` dep | footer Publish / Sync button |
-| `crates/terminal_view/src/terminal_panel.rs` | "+" in the terminal tab bar = `IconButton` dispatching `workspace::NewTerminal` (was a New Terminal / Spawn Task popover) | user request |
+| `crates/terminal_view/src/terminal_panel.rs` | "+" in the terminal tab bar = `IconButton` dispatching `workspace::NewTerminal` (was a New Terminal / Spawn Task popover); same buttons applied to restored panes (`persistence.rs`) and MovePane splits: before, only agent_ui's `set_assistant_enabled` did it, absent without `ai` | user request |
 | `crates/project/src/lsp_command.rs`, `crates/project/src/project.rs` | `GetHover::response_from_lsp` calls `bolt_typescript_hover::expand`; `mod bolt_typescript_hover` | TypeScript hover expanded |
 | `crates/settings_content/src/project.rs`, `crates/project/src/project_settings.rs`, `assets/settings/default.json` | `global_lsp_settings.expand_typescript_hovers` (default true) | TypeScript hover toggle |
 

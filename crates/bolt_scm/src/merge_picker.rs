@@ -250,6 +250,26 @@ impl PickerDelegate for MergePickerDelegate {
                                     branch.name().to_string(),
                                     positions.clone(),
                                 ))
+                                // "n↓ m↑" against the upstream before the date, like VS Code's `BranchItem.description`, zeros hidden.
+                                .when_some(
+                                    branch.tracking_status().and_then(|status| {
+                                        let mut parts = Vec::new();
+                                        if status.behind > 0 {
+                                            parts.push(format!("{}↓", status.behind));
+                                        }
+                                        if status.ahead > 0 {
+                                            parts.push(format!("{}↑", status.ahead));
+                                        }
+                                        (!parts.is_empty()).then(|| parts.join(" "))
+                                    }),
+                                    |this, label| {
+                                        this.child(
+                                            Label::new(label)
+                                                .size(LabelSize::Small)
+                                                .color(Color::Muted),
+                                        )
+                                    },
+                                )
                                 .child(Label::new(when).size(LabelSize::Small).color(Color::Muted)),
                         )
                         .when(!subject.is_empty(), |this| {

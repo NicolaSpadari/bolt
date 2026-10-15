@@ -1699,12 +1699,36 @@ impl PickerDelegate for BranchListDelegate {
                 .single_line()
                 .truncate()
                 .into_any_element(),
-            Entry::Branch { branch, positions } => {
-                HighlightedLabel::new(branch.name().to_string(), positions.clone())
-                    .single_line()
-                    .truncate()
-                    .into_any_element()
-            }
+            // BOLT: "n↓ m↑" against the upstream next to the name, like VS Code's `BranchItem.description`, zeros hidden.
+            Entry::Branch { branch, positions } => h_flex()
+                .min_w_0()
+                .gap_1p5()
+                .child(
+                    HighlightedLabel::new(branch.name().to_string(), positions.clone())
+                        .single_line()
+                        .truncate(),
+                )
+                .when_some(
+                    branch.tracking_status().and_then(|status| {
+                        let mut parts = Vec::new();
+                        if status.behind > 0 {
+                            parts.push(format!("{}↓", status.behind));
+                        }
+                        if status.ahead > 0 {
+                            parts.push(format!("{}↑", status.ahead));
+                        }
+                        (!parts.is_empty()).then(|| parts.join(" "))
+                    }),
+                    |this, label| {
+                        this.child(
+                            Label::new(label)
+                                .size(LabelSize::Small)
+                                .color(Color::Muted)
+                                .flex_none(),
+                        )
+                    },
+                )
+                .into_any_element(),
         };
 
         let focus_handle = self.focus_handle.clone();

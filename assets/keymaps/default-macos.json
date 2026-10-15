@@ -1783,11 +1783,11 @@
       "cmd-k": ["editor::ToggleComments", { "advance_downwards": false }],
     },
   },
-  // BOLT: commit from the source control message input.
+  // BOLT: commit from the source control message input; Enter adds a line, like VS Code.
   {
     "context": "BoltScmCommit > Editor",
     "bindings": {
-      "enter": "bolt_scm::Commit",
+      "enter": "editor::Newline",
       "cmd-enter": "bolt_scm::Commit",
     },
   },

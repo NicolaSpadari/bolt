@@ -24,7 +24,6 @@ log.workspace = true
 notifications.workspace = true
 gpui.workspace = true
 menu.workspace = true
-multi_buffer.workspace = true
 project.workspace = true
 theme.workspace = true
 theme_settings.workspace = true
