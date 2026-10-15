@@ -31,6 +31,8 @@ test-support = [
 [dependencies]
 agent_settings.workspace = true
 anyhow.workspace = true
+# BOLT: sync / publish button next to the branch in the status bar.
+bolt_scm.workspace = true
 auto_update.workspace = true
 fs.workspace = true
 platform_title_bar.workspace = true

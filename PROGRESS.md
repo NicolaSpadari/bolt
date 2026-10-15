@@ -143,14 +143,27 @@ file is upstream's hottest (46 commits / 3 months).
 - ⏳ Diagnostics (errors/warnings) of nested files are not yet combined on a collapsed parent.
 
 ### Backlog (on request)
-- ⏳ **Next session — SCM panel** (user request 2026-10-14):
-  - After a commit, the Commit button becomes **Push** / **Sync Changes ↑n ↓m** when the branch is ahead/behind
-    (VS Code). Today pushing works only from the terminal: also check why the "…" → Push entry doesn't work for the
-    user (it dispatches `git::Push`, routed through Zed's hidden GitPanel).
-  - After **Merge Branch…** (`git merge --no-commit --no-ff`), prefill the commit message like VS Code
-    (`Merge branch '<branch>' into <current>` / `Merge remote-tracking branch 'origin/main' into …`; git writes it to
-    `.git/MERGE_MSG`).
-  - Commit message input: the placeholder must truncate with an ellipsis instead of being clipped.
+- ✅ **SCM panel round 2** (2026-10-15, verified by the user on cb-frontend): logic copied from VS Code's git
+  extension source (`actionButton.ts`, `statusbar.ts`, `repository.ts` `_sync`, `git.ts` `branch`), see
+  `notes/vscode-scm-parity.md` rows 7 and 20.
+  - Fetch / Pull / Push / Sync run on the repository from `bolt_scm` (no longer dispatched to Zed's hidden GitPanel,
+    where push/fetch silently did nothing); toasts like Zed's, `bolt_scm:` lines in Bolt.log. After each remote
+    operation the repo is rescanned (`bolt_rescan`): Zed doesn't rescan when only remote refs move.
+  - Main button: Commit (changes / merge) → Publish Branch (no upstream) → Sync Changes n↓ m↑ → Commit disabled;
+    spinner while a remote operation runs.
+  - Status bar: sync button with `n↓ m↑` or cloud-upload Publish button next to the branch
+    (`bolt_scm::Sync` / `bolt_scm::PublishBranch`). ⏳ No spinner there yet.
+  - "Create Branch From…" = `git checkout -q -b <name> --no-track <ref>` (VS Code): before, a branch created from
+    `origin/main` tracked `origin/main`, so Sync pushed it to `main` (blocked by GitHub rules on cb-frontend).
+    Branch popover (footer): "Create From…" button in the tab bar.
+  - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
+    the panel as a truncated `Label` (ellipsis).
+- ⏳ Terminal panel "+" button (user request 2026-10-15): today it opens a dropdown (New Terminal / Spawn Task); a click
+  must open a new terminal directly, no dropdown and no Spawn Task entry.
+- ⏳ TypeScript hover always expanded (user request 2026-10-15): hovering an `interface` / `type` shows only its name;
+  it must show the whole declaration (scrolling when long). VS Code does this with expandable hovers (+/−, TS
+  quickinfo `verbosityLevel`); Bolt: always at max verbosity, no +/− controls. Check what vtsls / tsgo expose and
+  whether Zed's hover popover already scrolls.
 - ⏳ Merge panel: VS Code-style merge conflict editor (incoming / current / result, accept current / incoming / both),
   tied to the Merge Changes section of the source control panel (user request 2026-10-14; details later).
 - ⏳ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
@@ -222,6 +235,9 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/git_ui/src/git_panel.rs` | `GitStatusEntry::bolt_new`; `icon()` hidden when `bolt_panel` | single-file diff from bolt_scm; Zed panel stays loaded (its workspace git actions need it) but buttonless |
 | `assets/keymaps/default-macos.json` (scm) | `ctrl-shift-g` → `bolt_scm::ToggleFocus`; `BoltScmCommit > Editor`: enter / cmd-enter → `bolt_scm::Commit` | shortcuts |
 | `crates/title_bar/src/bolt_project_status.rs` (2) | folder icon before the footer project name; repo button (GitHub/GitLab/Bitbucket icon) opening the `origin` web page, hidden without a remote | user request |
+| `crates/git_ui/src/git_ui.rs` (scm 2) | `remote_output` module `pub` | push/pull/fetch toasts from bolt_scm |
+| `crates/git_ui/src/git_picker.rs` | "Create From…" button in the branch popover tab bar (action built by name: `bolt_scm` depends on `git_ui`) | VS Code "Create Branch From…" from the footer |
+| `crates/title_bar/Cargo.toml` | `bolt_scm` dep | footer Publish / Sync button |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -265,3 +281,6 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   system UI font; project panel chevron + folder icon (Zed's `both`), root hidden, nesting tree lines; CLI as `bolt`;
   app icon with a soft gradient. Semantic tokens: if colors stay tree-sitter-only after startup (no "semantic token"
   entries in `dev: open highlights tree view`), it is the startup race noted above — edit the file to refresh.
+- 2026-10-15: SCM round 2 (see Backlog). Lesson: for VS Code parity read the VS Code source
+  (`microsoft/vscode/extensions/git/src`) before implementing; guessing the publish/sync rules produced a push to
+  `main` attempt.

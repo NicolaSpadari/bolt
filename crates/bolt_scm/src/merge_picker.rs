@@ -241,10 +241,11 @@ pub(crate) fn merge_no_commit(
         .map(|branch| branch.name().to_string())
         .unwrap_or_else(|| "HEAD".to_string());
     let output = cx.background_spawn(async move {
-        util::command::new_std_command("git")
+        util::command::new_command("git")
             .args(["merge", "--no-commit", "--no-ff", &branch])
             .current_dir(work_directory.as_ref())
             .output()
+            .await
             .map(|output| (branch, output))
     });
     window
@@ -342,12 +343,28 @@ impl PickerDelegate for NewBranchNameDelegate {
         if name.is_empty() {
             return;
         }
-        let create = self.repository.update(cx, |repository, _| {
-            repository.create_branch(name, Some(self.base.to_string()))
+        // Same command as VS Code's "Create Branch From…": `--no-track`, so a branch created from `origin/main` has no
+        // upstream (it shows "Publish Branch" and is never pushed to `main`).
+        let work_directory = self.repository.read(cx).work_directory_abs_path.clone();
+        let base = self.base.to_string();
+        let checkout = cx.background_spawn(async move {
+            let output = util::command::new_command("git")
+                .args(["checkout", "-q", "-b", &name, "--no-track", &base])
+                .current_dir(work_directory.as_ref())
+                .output()
+                .await?;
+            anyhow::ensure!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            anyhow::Ok(())
         });
+        let repository = self.repository.clone();
         let workspace = self.workspace.clone();
         cx.spawn(async move |_, cx| {
-            let result: anyhow::Result<()> = async { create.await? }.await;
+            let result = checkout.await;
+            cx.update(|cx| repository.update(cx, |repository, cx| repository.bolt_rescan(cx)));
             if let Err(error) = result
                 && let Some(workspace) = workspace.upgrade()
             {

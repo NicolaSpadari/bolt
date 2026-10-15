@@ -11,7 +11,7 @@ Target: behave like VS Code's built-in Git SCM view (`extensions/git` + `src/vs/
 | 4 | Input validation | Warn on subject length (`git.inputValidation`, 50/72) with inline hint | | ⏳ |
 | 5 | Commit button | Primary button + dropdown: Commit, Commit (Amend), Commit & Push, Commit & Sync | | ⏳ |
 | 6 | Smart commit | Nothing staged → ask / auto-stage all (`git.enableSmartCommit`) | | ⏳ |
-| 7 | Action button | When clean: "Sync Changes ↓n ↑m" / "Publish Branch" | | ⏳ |
+| 7 | Action button | `actionButton.ts`: Commit when there are changes (or a merge to conclude) → else Publish Branch when the branch has no upstream → else Sync Changes n↓ m↑ when ahead/behind → else Commit (disabled); spinner while syncing. Sync = pull upstream, push `<branch>:<upstream>` | | ✅ |
 | 8 | Groups | Merge Changes, Staged Changes, Changes, Untracked (`git.untrackedChanges`: mixed / separate / hidden); counts; collapsible | | ⏳ |
 | 9 | Row | File icon, name, dimmed relative dir, status letter (M A D U R C !) colored, strikethrough for deleted | | ⏳ |
 | 10 | Row inline actions (hover) | Open File, Discard Changes, Stage (+) / Unstage (−) | | ⏳ |
@@ -24,7 +24,7 @@ Target: behave like VS Code's built-in Git SCM view (`extensions/git` + `src/vs/
 | 17 | Title bar | Commit ✓, Refresh, view toggle, "…" menu | | ⏳ |
 | 18 | "…" menu | Pull, Push, Clone, Checkout to…, Fetch; submenus Commit, Changes, Pull/Push, Branch (create/rename/delete/merge/rebase/publish), Remote (add/remove), Stash (stash, incl. untracked, apply/pop latest/pick, drop, view), Tags (create/delete), Worktrees; Show Git Output | | ⏳ |
 | 19 | Merge conflicts | Merge Changes group; open in merge editor / accept current/incoming; stage = mark resolved | | ⏳ |
-| 20 | Status bar | Branch name → checkout picker; sync indicator ↓↑ with click to sync | | ⏳ |
+| 20 | Status bar | `statusbar.ts`: branch name → checkout picker; with upstream: sync icon + "n↓ m↑" when ahead/behind; without: cloud-upload (Publish Branch). "Create Branch From…" uses `git checkout -q -b <name> --no-track <ref>` (`git.ts`) | | ✅ (no spinner in the status bar yet) |
 | 21 | Partial staging | Stage/revert selected ranges and hunks from diff editor and gutter | | ⏳ |
 | 22 | Keyboard | Full keyboard navigation in the list; `cmd-enter` commit from input | | ⏳ |
 | 23 | Git output | Log of executed git commands | | ⏳ |

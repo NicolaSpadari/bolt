@@ -1,8 +1,8 @@
 //! BOLT: VS Code-style Source Control panel (left dock), replacing Zed's git panel in the UI.
 //!
-//! Zed's `GitPanel` stays loaded (without a dock button) because Zed's workspace-level git actions (push, pull,
-//! fetch, stash, uncommit, …) are routed through it; this panel dispatches those actions and calls the repository
-//! directly for staging, discarding and committing. The commit message lives in the repository's shared commit buffer,
+//! Zed's `GitPanel` stays loaded (without a dock button) because Zed's workspace-level git actions (stash, uncommit,
+//! …) are routed through it; this panel dispatches those actions and calls the repository directly for staging,
+//! discarding, committing, fetch, pull and push. The commit message lives in the repository's shared commit buffer,
 //! so it is the same text in both panels. `git_panel.bolt_panel: false` shows Zed's panel instead.
 //! Spec: `notes/vscode-scm-parity.md`.
 
@@ -12,13 +12,20 @@ use std::ops::Range;
 
 use anyhow::Result;
 use askpass::AskPassDelegate;
-use editor::{Editor, EditorElement, EditorMode, EditorStyle};
+use editor::{Editor, EditorElement, EditorEvent, EditorMode, EditorStyle};
 use file_icons::FileIcons;
 use git::{
-    repository::{CommitOptions, RepoPath},
+    repository::{
+        CommitOptions, FetchOptions, PushOptions, Remote, RemoteCommandOutput, RepoPath,
+        UpstreamTracking,
+    },
     status::FileStatus,
 };
-use git_ui::{git_panel::GitStatusEntry, solo_diff_view::SoloDiffView};
+use git_ui::{
+    git_panel::GitStatusEntry,
+    remote_output::{self, RemoteAction, SuccessMessage, SuccessStyle},
+    solo_diff_view::SoloDiffView,
+};
 use git_ui_core::{askpass_modal::AskPassModal, notifications::show_error_toast};
 use gpui::{
     Action, AnyElement, App, AsyncWindowContext, ClickEvent, Context, Entity, EventEmitter,
@@ -27,18 +34,19 @@ use gpui::{
     uniform_list,
 };
 use multi_buffer::MultiBuffer;
+use notifications::status_toast::StatusToast;
 use project::{
     Project,
     git_store::{GitStoreEvent, Repository, RepositoryEvent},
 };
-use theme::ActiveTheme as _;
 use settings::Settings as _;
-use theme_settings::ThemeSettings;
 use settings::StatusStyle;
+use theme::ActiveTheme as _;
+use theme_settings::ThemeSettings;
 use ui::{
-    ButtonLike, ButtonStyle, ContextMenu, ElevationIndex, Icon, IconButton, IconName, IconSize,
-    Label, LabelSize, PopoverMenu, PopoverMenuHandle, SplitButton, SplitButtonStyle, Tab, TintColor,
-    Tooltip, prelude::*, rems_from_px,
+    ButtonLike, ButtonStyle, CommonAnimationExt as _, ContextMenu, ElevationIndex, Icon,
+    IconButton, IconName, IconSize, Label, LabelSize, PopoverMenu, PopoverMenuHandle, SplitButton,
+    SplitButtonStyle, Tab, TintColor, Tooltip, prelude::*, rems_from_px,
 };
 use util::ResultExt as _;
 use workspace::{
@@ -62,6 +70,10 @@ actions!(
         MergeBranch,
         /// Creates a new branch from a chosen ref and switches to it.
         CreateBranchFrom,
+        /// Pulls (when the branch has an upstream), then pushes the current branch.
+        Sync,
+        /// Pushes the current branch and sets its upstream.
+        PublishBranch,
     ]
 );
 
@@ -79,6 +91,20 @@ pub fn init(cx: &mut App) {
         });
         workspace.register_action(|workspace, _: &CreateBranchFrom, window, cx| {
             merge_picker::open(workspace, merge_picker::Mode::CreateFrom, window, cx);
+        });
+        workspace.register_action(|workspace, _: &Sync, window, cx| {
+            if let Some(panel) = workspace.panel::<ScmPanel>(cx) {
+                panel.update(cx, |panel, cx| {
+                    panel.run_remote(RemoteOperation::Sync, window, cx)
+                });
+            }
+        });
+        workspace.register_action(|workspace, _: &PublishBranch, window, cx| {
+            if let Some(panel) = workspace.panel::<ScmPanel>(cx) {
+                panel.update(cx, |panel, cx| {
+                    panel.run_remote(RemoteOperation::Push, window, cx)
+                });
+            }
         });
     })
     .detach();
@@ -121,8 +147,34 @@ enum Row {
 #[derive(Clone, Copy)]
 enum AfterCommit {
     Nothing,
+    Remote(RemoteOperation),
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RemoteOperation {
+    Fetch,
+    Pull,
     Push,
+    /// Pull (when the branch has an upstream), then push.
     Sync,
+}
+
+impl RemoteOperation {
+    fn name(self) -> &'static str {
+        match self {
+            RemoteOperation::Fetch => "fetch",
+            RemoteOperation::Pull => "pull",
+            RemoteOperation::Push => "push",
+            RemoteOperation::Sync => "sync",
+        }
+    }
+}
+
+/// What the main button does when there is nothing to commit (VS Code's "Publish Branch" / "Sync Changes").
+enum PrimaryAction {
+    Commit,
+    Publish,
+    Sync { ahead: u32, behind: u32 },
 }
 
 pub struct ScmPanel {
@@ -136,8 +188,11 @@ pub struct ScmPanel {
     selected: Option<Row>,
     scroll_handle: UniformListScrollHandle,
     pending_commit: Option<Task<()>>,
+    pending_remote: Option<RemoteOperation>,
     commit_menu_handle: PopoverMenuHandle<ContextMenu>,
     open_commit_buffer: Option<Task<()>>,
+    _commit_editor_subscription: Option<Subscription>,
+    prefilled_merge_message: Option<SharedString>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -176,7 +231,12 @@ impl ScmPanel {
                         true,
                     ) => {
                         this.update_sections(cx);
-                        this.update_placeholder(window, cx);
+                        this.prefill_merge_message(window, cx);
+                    }
+                    // Ahead / behind counts of the main button, merge message.
+                    GitStoreEvent::RepositoryUpdated(..) => {
+                        this.prefill_merge_message(window, cx);
+                        cx.notify()
                     }
                     _ => {}
                 },
@@ -194,8 +254,11 @@ impl ScmPanel {
                 selected: None,
                 scroll_handle: UniformListScrollHandle::new(),
                 pending_commit: None,
+                pending_remote: None,
                 commit_menu_handle: PopoverMenuHandle::default(),
                 open_commit_buffer: None,
+                _commit_editor_subscription: None,
+                prefilled_merge_message: None,
                 _subscriptions: vec![subscription, settings_subscription],
             };
             this.set_repository(window, cx);
@@ -238,8 +301,15 @@ impl ScmPanel {
                         cx,
                     )
                 });
+                // The main button switches between Commit and Sync / Publish as the message is typed.
+                this._commit_editor_subscription =
+                    Some(cx.subscribe(&editor, |_, _, event: &EditorEvent, cx| {
+                        if matches!(event, EditorEvent::BufferEdited) {
+                            cx.notify();
+                        }
+                    }));
                 this.commit_editor = Some(editor);
-                this.update_placeholder(window, cx);
+                this.prefill_merge_message(window, cx);
                 cx.notify();
             })
             .log_err();
@@ -254,16 +324,39 @@ impl ScmPanel {
             .map(|branch| branch.name().to_string())
     }
 
-    fn update_placeholder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let placeholder = match self.branch_name(cx) {
+    fn placeholder(&self, cx: &App) -> String {
+        match self.branch_name(cx) {
             Some(branch) => format!("Message (⌘⏎ to commit on \"{branch}\")"),
             None => "Message (⌘⏎ to commit)".to_string(),
-        };
-        if let Some(editor) = &self.commit_editor {
-            editor.update(cx, |editor, cx| {
-                editor.set_placeholder_text(&placeholder, window, cx)
-            });
         }
+    }
+
+    /// Fills the empty commit input with git's merge message (`.git/MERGE_MSG`), like VS Code. Once per merge, so a
+    /// message cleared by the user stays cleared.
+    fn prefill_merge_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(repository), Some(editor)) = (&self.repository, &self.commit_editor) else {
+            return;
+        };
+        let merge_message = repository.read(cx).merge.message.clone();
+        if merge_message == self.prefilled_merge_message {
+            return;
+        }
+        self.prefilled_merge_message = merge_message.clone();
+        // The input is single-line: keep the subject, dropping git's `# Conflicts:` comment block.
+        let Some(subject) = merge_message.as_ref().and_then(|message| {
+            message
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(str::to_string)
+        }) else {
+            return;
+        };
+        editor.update(cx, |editor, cx| {
+            if editor.text(cx).trim().is_empty() {
+                editor.set_text(subject, window, cx);
+            }
+        });
     }
 
     fn update_sections(&mut self, cx: &mut Context<Self>) {
@@ -625,16 +718,8 @@ impl ScmPanel {
                 match result {
                     Ok(()) => {
                         editor.update(cx, |editor, cx| editor.clear(window, cx));
-                        match after {
-                            AfterCommit::Nothing => {}
-                            AfterCommit::Push => {
-                                window.dispatch_action(git::Push.boxed_clone(), cx)
-                            }
-                            AfterCommit::Sync => {
-                                // Repository jobs run in order: pull, then push.
-                                window.dispatch_action(git::Pull.boxed_clone(), cx);
-                                window.dispatch_action(git::Push.boxed_clone(), cx);
-                            }
+                        if let AfterCommit::Remote(operation) = after {
+                            this.run_remote(operation, window, cx);
                         }
                     }
                     Err(error) => {
@@ -652,6 +737,258 @@ impl ScmPanel {
 
     fn commit(&mut self, _: &Commit, window: &mut Window, cx: &mut Context<Self>) {
         self.commit_with(CommitOptions::default(), AfterCommit::Nothing, window, cx);
+    }
+
+    fn commit_message_empty(&self, cx: &App) -> bool {
+        self.commit_editor
+            .as_ref()
+            .is_none_or(|editor| editor.read(cx).buffer().read(cx).len(cx).0 == 0)
+    }
+
+    fn merge_in_progress(&self, cx: &App) -> bool {
+        self.repository
+            .as_ref()
+            .is_some_and(|repository| repository.read(cx).merge.message.is_some())
+    }
+
+    /// VS Code's action button (`extensions/git/src/actionButton.ts`): Commit when there are changes to commit (or a
+    /// merge to conclude), else Publish Branch when the branch has no upstream, else Sync Changes when it is ahead /
+    /// behind, else a disabled Commit.
+    fn primary_action(&self, cx: &App) -> PrimaryAction {
+        if self.change_count() > 0 || self.merge_in_progress(cx) {
+            return PrimaryAction::Commit;
+        }
+        let Some(branch) = self
+            .repository
+            .as_ref()
+            .and_then(|repository| repository.read(cx).branch.as_ref())
+        else {
+            return PrimaryAction::Commit;
+        };
+        let Some(upstream) = &branch.upstream else {
+            return PrimaryAction::Publish;
+        };
+        match upstream.tracking.status() {
+            Some(status) if status.ahead > 0 || status.behind > 0 => PrimaryAction::Sync {
+                ahead: status.ahead,
+                behind: status.behind,
+            },
+            _ => PrimaryAction::Commit,
+        }
+    }
+
+    fn primary_click(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.primary_action(cx) {
+            PrimaryAction::Commit => self.commit(&Commit, window, cx),
+            PrimaryAction::Publish => self.run_remote(RemoteOperation::Push, window, cx),
+            PrimaryAction::Sync { .. } => self.run_remote(RemoteOperation::Sync, window, cx),
+        }
+    }
+
+    /// Runs fetch / pull / push on the repository directly instead of dispatching `git::Fetch` / `git::Pull` /
+    /// `git::Push`, which are routed through Zed's hidden git panel.
+    fn run_remote(
+        &mut self,
+        operation: RemoteOperation,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if operation == RemoteOperation::Fetch {
+            self.fetch(window, cx);
+            return;
+        }
+        if self.pending_remote.is_some() {
+            return;
+        }
+        let Some(repository) = self.repository.clone() else {
+            return;
+        };
+        let Some(branch) = repository.read(cx).branch.clone() else {
+            if let Some(workspace) = self.workspace.upgrade() {
+                show_error_toast(
+                    workspace,
+                    operation.name(),
+                    anyhow::anyhow!("HEAD is detached: check out a branch first."),
+                    cx,
+                );
+            }
+            return;
+        };
+        let tracked_upstream = branch
+            .upstream
+            .clone()
+            .filter(|upstream| matches!(upstream.tracking, UpstreamTracking::Tracked(_)));
+        let upstream_remote: Option<SharedString> = tracked_upstream
+            .as_ref()
+            .and_then(|upstream| upstream.remote_name())
+            .map(|name| name.to_string().into());
+        let branch_name: SharedString = branch.name().to_string().into();
+        // Like VS Code's sync: `<branch>:<upstream branch>`.
+        let remote_branch: SharedString = tracked_upstream
+            .as_ref()
+            .and_then(|upstream| upstream.branch_name())
+            .map(|name| name.to_string().into())
+            .unwrap_or_else(|| branch_name.clone());
+        let pull = match operation {
+            RemoteOperation::Pull => true,
+            RemoteOperation::Fetch | RemoteOperation::Push => false,
+            RemoteOperation::Sync => tracked_upstream.is_some(),
+        };
+        let push = matches!(operation, RemoteOperation::Push | RemoteOperation::Sync);
+        let push_options = tracked_upstream
+            .is_none()
+            .then_some(PushOptions::SetUpstream);
+        // `git pull <remote>` needs the branch name when there is no upstream to pull from.
+        let pull_branch = branch.upstream.is_none().then(|| branch_name.clone());
+        let pull_askpass = pull.then(|| self.askpass("git pull", window, cx));
+        let push_askpass = push.then(|| self.askpass("git push", window, cx));
+
+        self.pending_remote = Some(operation);
+        cx.notify();
+        cx.spawn_in(window, async move |this, cx| {
+            let result: Result<()> = async {
+                let remote_name = match upstream_remote {
+                    Some(name) => name,
+                    None => {
+                        let remotes = repository
+                            .update(cx, |repository, _| {
+                                repository.get_remotes(Some(branch_name.to_string()), push)
+                            })
+                            .await??;
+                        remotes
+                            .iter()
+                            .find(|remote| remote.name.as_ref() == "origin")
+                            .or_else(|| remotes.first())
+                            .map(|remote| remote.name.clone())
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "No remote available. Add a remote to be able to publish changes."
+                                )
+                            })?
+                    }
+                };
+                let remote = Remote {
+                    name: remote_name.clone(),
+                };
+                if let Some(askpass) = pull_askpass {
+                    log::info!("bolt_scm: git pull {remote_name}");
+                    let output = repository
+                        .update(cx, |repository, cx| {
+                            repository.pull(pull_branch, remote_name.clone(), false, askpass, cx)
+                        })
+                        .await??;
+                    if !push {
+                        this.update(cx, |this, cx| {
+                            this.show_remote_output(RemoteAction::Pull(remote.clone()), output, cx)
+                        })?;
+                    }
+                }
+                if let Some(askpass) = push_askpass {
+                    log::info!("bolt_scm: git push {remote_name} {branch_name}:{remote_branch}");
+                    let output = repository
+                        .update(cx, |repository, cx| {
+                            repository.push(
+                                branch_name.clone(),
+                                remote_branch,
+                                remote_name,
+                                push_options,
+                                askpass,
+                                cx,
+                            )
+                        })
+                        .await??;
+                    this.update(cx, |this, cx| {
+                        this.show_remote_output(RemoteAction::Push(branch_name, remote), output, cx)
+                    })?;
+                }
+                Ok(())
+            }
+            .await;
+            this.update(cx, |this, cx| this.finish_remote(operation, result, cx))
+                .log_err();
+        })
+        .detach();
+    }
+
+    fn fetch(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.pending_remote.is_some() {
+            return;
+        }
+        let Some(repository) = self.repository.clone() else {
+            return;
+        };
+        let askpass = self.askpass("git fetch", window, cx);
+        self.pending_remote = Some(RemoteOperation::Fetch);
+        cx.notify();
+        cx.spawn_in(window, async move |this, cx| {
+            log::info!("bolt_scm: git fetch --all");
+            let result: Result<()> = async {
+                let output = repository
+                    .update(cx, |repository, cx| {
+                        repository.fetch(FetchOptions::All, askpass, cx)
+                    })
+                    .await??;
+                this.update(cx, |this, cx| {
+                    this.show_remote_output(RemoteAction::Fetch(None), output, cx)
+                })?;
+                Ok(())
+            }
+            .await;
+            this.update(cx, |this, cx| {
+                this.finish_remote(RemoteOperation::Fetch, result, cx)
+            })
+            .log_err();
+        })
+        .detach();
+    }
+
+    fn finish_remote(
+        &mut self,
+        operation: RemoteOperation,
+        result: Result<()>,
+        cx: &mut Context<Self>,
+    ) {
+        self.pending_remote = None;
+        // Zed doesn't rescan when only remote refs change, so the ahead / behind counts would stay stale.
+        if let Some(repository) = &self.repository {
+            repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
+        }
+        if let Err(error) = result {
+            log::error!("bolt_scm: git {} failed: {error:?}", operation.name());
+            if let Some(workspace) = self.workspace.upgrade() {
+                show_error_toast(workspace, operation.name(), error, cx);
+            }
+        }
+        cx.notify();
+    }
+
+    fn show_remote_output(
+        &self,
+        action: RemoteAction,
+        output: RemoteCommandOutput,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(workspace) = self.workspace.upgrade() else {
+            return;
+        };
+        let SuccessMessage { message, style } = remote_output::format_output(&action, output);
+        workspace.update(cx, |workspace, cx| {
+            let toast = StatusToast::new(message, cx, move |this, _| {
+                let this = this.icon(
+                    Icon::new(IconName::GitBranch)
+                        .size(IconSize::Small)
+                        .color(Color::Muted),
+                );
+                match style {
+                    SuccessStyle::PushPrLink { label, url } => {
+                        this.action(label, move |_, cx| cx.open_url(&url))
+                    }
+                    SuccessStyle::Toast | SuccessStyle::ToastWithLog { .. } => this,
+                }
+                .dismiss_button(true)
+            });
+            workspace.toggle_status_toast(toast, cx)
+        });
     }
 
     fn drop_all_stashes(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -702,11 +1039,28 @@ impl ScmPanel {
                 let panel = panel.clone();
                 Some(ContextMenu::build(window, cx, move |menu, _, _| {
                     let drop_all = panel.clone();
-                    menu.action("Pull", git::Pull.boxed_clone())
-                        .action("Push", git::Push.boxed_clone())
+                    let remote_entry = |label: &'static str, operation: RemoteOperation| {
+                        let panel = panel.clone();
+                        move |menu: ContextMenu| {
+                            menu.entry(label, None, move |window, cx| {
+                                panel
+                                    .update(cx, |panel, cx| panel.run_remote(operation, window, cx))
+                                    .ok();
+                            })
+                        }
+                    };
+                    let pull = remote_entry("Pull", RemoteOperation::Pull);
+                    let push = remote_entry("Push", RemoteOperation::Push);
+                    let submenu_pull = remote_entry("Pull", RemoteOperation::Pull);
+                    let submenu_push = remote_entry("Push", RemoteOperation::Push);
+                    let sync = remote_entry("Sync", RemoteOperation::Sync);
+                    let fetch = remote_entry("Fetch", RemoteOperation::Fetch);
+                    let submenu_fetch = remote_entry("Fetch", RemoteOperation::Fetch);
+                    menu.map(pull)
+                        .map(push)
                         .action("Clone", git::Clone.boxed_clone())
                         .action("Checkout to…", zed_actions::git::Branch.boxed_clone())
-                        .action("Fetch", git::Fetch.boxed_clone())
+                        .map(fetch)
                         .separator()
                         .submenu("Commit", |menu, _, _| {
                             menu.action("Commit", Commit.boxed_clone())
@@ -716,12 +1070,13 @@ impl ScmPanel {
                             menu.action("Stage All Changes", git::StageAll.boxed_clone())
                                 .action("Unstage All Changes", git::UnstageAll.boxed_clone())
                         })
-                        .submenu("Pull, Push", |menu, _, _| {
-                            menu.action("Pull", git::Pull.boxed_clone())
+                        .submenu("Pull, Push", move |menu, _, _| {
+                            menu.map(sync.clone())
+                                .map(submenu_pull.clone())
                                 .action("Pull (Rebase)", git::PullRebase.boxed_clone())
-                                .action("Push", git::Push.boxed_clone())
+                                .map(submenu_push.clone())
                                 .action("Force Push", git::ForcePush.boxed_clone())
-                                .action("Fetch", git::Fetch.boxed_clone())
+                                .map(submenu_fetch.clone())
                         })
                         .submenu("Branch", |menu, _, _| {
                             menu.action("Merge Branch…", MergeBranch.boxed_clone())
@@ -774,7 +1129,11 @@ impl ScmPanel {
             .justify_between()
             .border_b_1()
             .border_color(cx.theme().colors().border)
-            .child(Label::new("Changes").size(LabelSize::Small).color(Color::Muted))
+            .child(
+                Label::new("Changes")
+                    .size(LabelSize::Small)
+                    .color(Color::Muted),
+            )
             .child(
                 h_flex()
                     .gap_0p5()
@@ -784,7 +1143,8 @@ impl ScmPanel {
                             .tooltip(Tooltip::text("Refresh"))
                             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| {
                                 if let Some(repository) = &this.repository {
-                                    repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
+                                    repository
+                                        .update(cx, |repository, cx| repository.bolt_rescan(cx));
                                 }
                             })),
                     )
@@ -818,7 +1178,40 @@ impl ScmPanel {
             .commit_editor
             .as_ref()
             .is_some_and(|editor| editor.focus_handle(cx).contains_focused(window, cx));
+        let message_empty = self.commit_message_empty(cx);
         let committing = self.pending_commit.is_some();
+        let busy = committing || self.pending_remote.is_some();
+        let primary_action = self.primary_action(cx);
+        let primary_disabled = busy
+            || (matches!(primary_action, PrimaryAction::Commit)
+                && self.change_count() == 0
+                && !self.merge_in_progress(cx));
+        let label: SharedString = if committing {
+            "Committing…".into()
+        } else if let Some(operation) = self.pending_remote {
+            match operation {
+                RemoteOperation::Fetch => "Fetching…".into(),
+                RemoteOperation::Pull => "Pulling…".into(),
+                RemoteOperation::Push => "Pushing…".into(),
+                RemoteOperation::Sync => "Syncing…".into(),
+            }
+        } else {
+            match primary_action {
+                PrimaryAction::Commit if self.has_staged() => "Commit".into(),
+                PrimaryAction::Commit => "Commit Tracked".into(),
+                PrimaryAction::Publish => "Publish Branch".into(),
+                PrimaryAction::Sync { ahead, behind } => {
+                    let mut label = "Sync Changes".to_string();
+                    if behind > 0 {
+                        label.push_str(&format!(" {behind}↓"));
+                    }
+                    if ahead > 0 {
+                        label.push_str(&format!(" {ahead}↑"));
+                    }
+                    label.into()
+                }
+            }
+        };
         let panel = cx.entity().downgrade();
         let commit_menu_open = self.commit_menu_handle.is_deployed();
         v_flex()
@@ -836,82 +1229,131 @@ impl ScmPanel {
                     .items_center()
                     .rounded_sm()
                     .border_1()
-                    .border_color(if focused { colors.border_focused } else { colors.border })
+                    .border_color(if focused {
+                        colors.border_focused
+                    } else {
+                        colors.border
+                    })
+                    .relative()
                     .bg(colors.editor_background)
                     .overflow_hidden()
-                    .children(self.commit_editor.as_ref().map(|editor| {
-                        EditorElement::new(editor, commit_input_style(cx))
-                    })),
+                    .children(
+                        self.commit_editor
+                            .as_ref()
+                            .map(|editor| EditorElement::new(editor, commit_input_style(cx))),
+                    )
+                    // Drawn here rather than with the editor's placeholder, which is clipped instead of truncated.
+                    .when(message_empty, |this| {
+                        this.child(
+                            div()
+                                .absolute()
+                                .inset_0()
+                                .px_1p5()
+                                .flex()
+                                .items_center()
+                                .child(
+                                    Label::new(self.placeholder(cx))
+                                        .size(LabelSize::Custom(rems(0.8125)))
+                                        .color(Color::Placeholder)
+                                        .truncate(),
+                                ),
+                        )
+                    }),
             )
             .child(
                 SplitButton::new(
                     ButtonLike::new_rounded_left("bolt-scm-commit-button")
                         .layer(ElevationIndex::ModalSurface)
                         .full_width()
-                        .disabled(committing)
+                        .disabled(primary_disabled)
                         .child(
-                            h_flex().w_full().justify_center().child(
-                                Label::new(if committing {
-                                    "Committing…"
-                                } else if self.has_staged() {
-                                    "Commit"
-                                } else {
-                                    "Commit Tracked"
+                            h_flex()
+                                .w_full()
+                                .gap_1()
+                                .justify_center()
+                                .when(self.pending_remote.is_some(), |this| {
+                                    this.child(
+                                        Icon::new(IconName::ArrowCircle)
+                                            .size(IconSize::Small)
+                                            .color(Color::Muted)
+                                            .with_rotate_animation(2),
+                                    )
                                 })
-                                .size(LabelSize::Small)
-                                .color(if committing { Color::Disabled } else { Color::Default }),
-                            ),
+                                .child(Label::new(label).size(LabelSize::Small).color(
+                                    if primary_disabled {
+                                        Color::Disabled
+                                    } else {
+                                        Color::Default
+                                    },
+                                )),
                         )
                         .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
-                            this.commit(&Commit, window, cx)
+                            this.primary_click(window, cx)
                         })),
                     PopoverMenu::new("bolt-scm-commit-options")
-                            .trigger(
-                                ButtonLike::new_rounded_right("bolt-scm-commit-options-button")
-                                    .layer(ElevationIndex::ModalSurface)
-                                    .selected_style(ButtonStyle::Tinted(TintColor::Accent))
-                                    .width(rems_from_px(20_f32))
-                                    .child(
-                                        Icon::new(if commit_menu_open {
-                                            IconName::ChevronUp
-                                        } else {
-                                            IconName::ChevronDown
-                                        })
-                                        .size(IconSize::XSmall),
-                                    ),
-                            )
-                            .with_handle(self.commit_menu_handle.clone())
-                            .anchor(gpui::Anchor::TopRight)
-                            .offset(gpui::Point {
-                                x: px(0.),
-                                y: px(2.),
-                            })
-                            .menu(move |window, cx| {
-                                let panel = panel.clone();
-                                Some(ContextMenu::build(window, cx, move |menu, _, _| {
-                                    let entry = |label: &'static str, options: CommitOptions, after: AfterCommit| {
+                        .trigger(
+                            ButtonLike::new_rounded_right("bolt-scm-commit-options-button")
+                                .layer(ElevationIndex::ModalSurface)
+                                .selected_style(ButtonStyle::Tinted(TintColor::Accent))
+                                .width(rems_from_px(20_f32))
+                                .child(
+                                    Icon::new(if commit_menu_open {
+                                        IconName::ChevronUp
+                                    } else {
+                                        IconName::ChevronDown
+                                    })
+                                    .size(IconSize::XSmall),
+                                ),
+                        )
+                        .with_handle(self.commit_menu_handle.clone())
+                        .anchor(gpui::Anchor::TopRight)
+                        .offset(gpui::Point {
+                            x: px(0.),
+                            y: px(2.),
+                        })
+                        .menu(move |window, cx| {
+                            let panel = panel.clone();
+                            Some(ContextMenu::build(window, cx, move |menu, _, _| {
+                                let entry =
+                                    |label: &'static str,
+                                     options: CommitOptions,
+                                     after: AfterCommit| {
                                         let panel = panel.clone();
                                         move |menu: ContextMenu| {
                                             menu.entry(label, None, move |window, cx| {
                                                 panel
                                                     .update(cx, |panel, cx| {
-                                                        panel.commit_with(options, after, window, cx)
+                                                        panel
+                                                            .commit_with(options, after, window, cx)
                                                     })
                                                     .ok();
                                             })
                                         }
                                     };
-                                    let amend = CommitOptions {
-                                        amend: true,
-                                        ..CommitOptions::default()
-                                    };
-                                    let menu = entry("Commit", CommitOptions::default(), AfterCommit::Nothing)(menu);
-                                    let menu = entry("Commit (Amend)", amend, AfterCommit::Nothing)(menu);
-                                    let menu = entry("Commit & Push", CommitOptions::default(), AfterCommit::Push)(menu);
-                                    entry("Commit & Sync", CommitOptions::default(), AfterCommit::Sync)(menu)
-                                }))
-                            })
-                            .into_any_element(),
+                                let amend = CommitOptions {
+                                    amend: true,
+                                    ..CommitOptions::default()
+                                };
+                                let menu = entry(
+                                    "Commit",
+                                    CommitOptions::default(),
+                                    AfterCommit::Nothing,
+                                )(menu);
+                                let menu =
+                                    entry("Commit (Amend)", amend, AfterCommit::Nothing)(menu);
+                                let menu = entry(
+                                    "Commit & Push",
+                                    CommitOptions::default(),
+                                    AfterCommit::Remote(RemoteOperation::Push),
+                                )(menu);
+                                entry(
+                                    "Commit & Sync",
+                                    CommitOptions::default(),
+                                    AfterCommit::Remote(RemoteOperation::Sync),
+                                )(menu)
+                            }))
+                        })
+                        .into_any_element(),
                 )
                 .style(SplitButtonStyle::Outlined),
             )
@@ -1077,7 +1519,7 @@ impl ScmPanel {
 
         let open_entry = entry.clone();
         let discard_entry = entry.clone();
-        let stage_path = entry.repo_path.clone();
+        let stage_path = entry.repo_path;
         let actions = h_flex()
             .gap_0p5()
             .when(!is_deleted, |this| {

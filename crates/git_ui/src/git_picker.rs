@@ -10,6 +10,7 @@ use ui::{
     FluentBuilder, ToggleButtonGroup, ToggleButtonGroupStyle, ToggleButtonSimple, Tooltip,
     prelude::*,
 };
+use util::ResultExt as _;
 use workspace::{ModalView, Workspace, pane};
 
 use crate::branch_picker::{
@@ -194,7 +195,8 @@ impl GitPicker {
         let branches_focus_handle = focus_handle.clone();
         let stash_focus_handle = focus_handle;
 
-        h_flex().p_2().pb_0p5().w_full().child(
+        // BOLT: `justify_between` + the "Create From…" button (VS Code's "Create Branch From…").
+        h_flex().p_2().pb_0p5().w_full().justify_between().child(
             ToggleButtonGroup::single_row(
                 "git-picker-tabs",
                 [
@@ -242,6 +244,22 @@ impl GitPicker {
                 GitPickerTab::Stashes => 1,
             }),
         )
+        // BOLT: handled by bolt_scm, which depends on git_ui, so the action is built by name.
+        .when(self.tab == GitPickerTab::Branches, |this| {
+            this.child(
+                Button::new("bolt-create-branch-from", "Create From…")
+                    .label_size(LabelSize::Small)
+                    .tooltip(Tooltip::text("Create Branch From…"))
+                    .on_click(cx.listener(|_, _, window, cx| {
+                        if let Some(action) =
+                            cx.build_action("bolt_scm::CreateBranchFrom", None).log_err()
+                        {
+                            window.dispatch_action(action, cx);
+                        }
+                        cx.emit(DismissEvent);
+                    })),
+            )
+        })
     }
 
     fn render_active_picker(

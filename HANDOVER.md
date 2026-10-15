@@ -5,7 +5,7 @@ Bolt — /Users/administrator/Projects/bolt
 Branch: `main` (all Bolt work goes here) | Remote: `origin` = github.com/NicolaSpadari/bolt (private), `upstream` = zed
 Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime: macOS arm64, Xcode 26.2
 
-### Session Summary (2026-10-13 → 2026-10-14)
+### Session Summary (2026-10-13 → 2026-10-15)
 - Decisions (PROGRESS "Decisions"): upstream sync by merging Zed stable tags (`notes/upstream-sync.md`), bundle ID
   `com.spadari.bolt`, Minimal Bolt (`notes/minimal-strip.md`), all work on `main`.
 - Done: theme One Dark Pro Cursor + native Material icons (color); minimal strip (AI/Threads, edit predictions,
@@ -15,6 +15,8 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
   search panel (`bolt_search_panel`); user's Zed settings/keybindings as defaults; source control panel
   (`bolt_scm`) with Merge Branch (`git merge --no-commit --no-ff`) and Create Branch From…; `git_panel.bolt_panel`
   switch (default Bolt's panel); release bundle script + first clean release build.
+- 2026-10-15: SCM round 2 (fetch/pull/push/sync from `bolt_scm`, VS Code action button + status bar sync/publish,
+  `--no-track` Create Branch From, merge message prefill, placeholder ellipsis). Verified by the user.
 
 ### Current State
 - All work committed and pushed on `main`. Release bundle rebuilt on 2026-10-14 (`target/release/Bolt.app`); the copy in
@@ -43,12 +45,10 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - `.rules` contains a block injected by the context-mode plugin: never commit it.
 
 ### Next Steps (wait for the user to pick)
-1. SCM panel (agreed for the next session, details in PROGRESS backlog): Commit button → Push / Sync after
-   committing (pushing from Bolt's GUI doesn't work today), merge commit message prefilled from `.git/MERGE_MSG`,
-   ellipsis on the message placeholder.
-2. Backlog (PROGRESS): merge panel, search panel UI restyle (Zed-native, UI only), lighter builds via Cargo
-   features (later), `script/bolt-sync` (upstream sync, P0).
-3. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).
+1. Backlog (PROGRESS): spinner on the status bar sync button, terminal "+" → new terminal directly, TypeScript hover
+   always expanded, merge panel, search panel UI restyle (Zed-native, UI only), lighter builds via Cargo features
+   (later), `script/bolt-sync` (upstream sync, P0).
+2. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).
 
 ### Useful Context
 - Xcode 26 needs `xcodebuild -downloadComponent MetalToolchain` (done) or `gpui_apple` fails.
@@ -58,3 +58,5 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
   `crates/title_bar/src/bolt_project_status.rs`, `crates/bolt_iconify`, `script/bolt-*`, `assets/icons/bolt/`,
   `assets/icons/bundled_icon_themes/`, `assets/themes/one_dark_pro_cursor/`.
 - User preferences: Italian, concise; simplest approach; one feature at a time, verified with a build.
+- VS Code parity: read the VS Code source first (`microsoft/vscode/extensions/git/src/*.ts` for git) and replicate the
+  exact logic; the user explicitly asked not to guess.

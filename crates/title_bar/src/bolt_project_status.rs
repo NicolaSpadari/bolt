@@ -97,7 +97,9 @@ impl TitleBar {
                 )
             })
             .when_some(repository.filter(|_| is_git_enabled), |this, repository| {
+                let sync_button = render_sync_button(&repository, cx);
                 this.children(self.render_worktree_and_branch(repository, linked_worktree_name, cx))
+                    .children(sync_button)
             })
             .when_some(web_url, |this, web_url| {
                 let icon = hosting_icon(&web_url);
@@ -111,6 +113,53 @@ impl TitleBar {
             })
             .into_any_element()
     }
+}
+
+/// VS Code's `SyncStatusBar`: "Publish Branch" (cloud) for a branch without an upstream, else "Synchronize Changes"
+/// with "n↓ m↑" when the branch is ahead / behind.
+fn render_sync_button(
+    repository: &Entity<project::git_store::Repository>,
+    cx: &App,
+) -> Option<AnyElement> {
+    let branch = repository.read(cx).branch.as_ref()?;
+    let button = match &branch.upstream {
+        Some(upstream) => ButtonLike::new("bolt-sync-branch")
+            .child(
+                h_flex()
+                    .gap_0p5()
+                    .child(
+                        Icon::new(IconName::RotateCw)
+                            .size(IconSize::XSmall)
+                            .color(Color::Muted),
+                    )
+                    .when_some(
+                        upstream
+                            .tracking
+                            .status()
+                            .filter(|status| status.ahead > 0 || status.behind > 0),
+                        |this, status| {
+                            this.child(
+                                Label::new(format!("{}↓ {}↑", status.behind, status.ahead))
+                                    .size(LabelSize::Small)
+                                    .color(Color::Muted),
+                            )
+                        },
+                    ),
+            )
+            .tooltip(Tooltip::text("Synchronize Changes"))
+            .on_click(|_, window, cx| window.dispatch_action(bolt_scm::Sync.boxed_clone(), cx)),
+        None => ButtonLike::new("bolt-publish-branch")
+            .child(
+                Icon::from_path("icons/bolt/cloud_upload.svg")
+                    .size(IconSize::Small)
+                    .color(Color::Muted),
+            )
+            .tooltip(Tooltip::text("Publish Branch"))
+            .on_click(|_, window, cx| {
+                window.dispatch_action(bolt_scm::PublishBranch.boxed_clone(), cx)
+            }),
+    };
+    Some(button.into_any_element())
 }
 
 /// Converts a git remote (`git@host:owner/repo.git`, `ssh://git@host/owner/repo`, `https://host/owner/repo.git`) to
