@@ -141,6 +141,10 @@ pub struct GlobalLspSettings {
 
     /// Rules for highlighting semantic tokens.
     pub semantic_token_rules: SemanticTokenRules,
+    /// BOLT: TypeScript hovers expanded one level.
+    ///
+    /// Default: `true`
+    pub expand_typescript_hovers: bool,
 }
 
 impl Default for GlobalLspSettings {
@@ -151,6 +155,7 @@ impl Default for GlobalLspSettings {
             max_buffer_line_length: 20_000,
             notifications: LspNotificationSettings::default(),
             semantic_token_rules: SemanticTokenRules::default(),
+            expand_typescript_hovers: true,
         }
     }
 }
@@ -771,6 +776,12 @@ impl Settings for ProjectSettings {
                     .as_ref()
                     .unwrap()
                     .clone(),
+                // BOLT
+                expand_typescript_hovers: content
+                    .global_lsp_settings
+                    .as_ref()
+                    .and_then(|settings| settings.expand_typescript_hovers)
+                    .unwrap_or(true),
             },
             dap: project
                 .dap

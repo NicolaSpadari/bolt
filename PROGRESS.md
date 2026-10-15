@@ -159,12 +159,15 @@ file is upstream's hottest (46 commits / 3 months).
   - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
     the panel as a truncated `Label` (ellipsis).
 - ✅ Terminal panel "+" opens a new terminal directly (no New Terminal / Spawn Task menu) (user request 2026-10-15).
-- ⏳ TypeScript hover always expanded (user request 2026-10-15): hovering an `interface` / `type` shows only its name;
-  it must show the whole declaration (scrolling when long). VS Code does this with expandable hovers (+/−, TS
-  quickinfo `verbosityLevel`); Bolt: always at max verbosity, no +/− controls. Check what vtsls / tsgo expose and
-  whether Zed's hover popover already scrolls.
-- ⏳ Merge panel: VS Code-style merge conflict editor (incoming / current / result, accept current / incoming / both),
-  tied to the Merge Changes section of the source control panel (user request 2026-10-14; details later).
+- ✅ SCM auto-reveal (user request 2026-10-15): switching tab selects and reveals the active file in the panel, like
+  VS Code's `scm.autoReveal` (`scmViewPane.ts` `onDidActiveEditorChange`: groups searched from the last one, selection
+  kept when already selected or not listed); the selection also survives panel refreshes.
+- ✅ TypeScript hover expanded one level (user request 2026-10-15), setting `global_lsp_settings.expand_typescript_hovers`
+  (default true): VS Code's `hover.ts` sends tsserver `quickinfo` with `verbosityLevel` (TS ≥ 5.9, +/− change it);
+  vtsls has the same provider but never passes a level over LSP, so `crates/project/src/bolt_typescript_hover.rs` asks
+  `typescript.tsserverRequest` `quickinfo` with `verbosityLevel: 1` and replaces the signature code block of vtsls'
+  hover. Level 1 = the hovered declaration expanded (`interface User { … }`), nested types by name. Works with
+  vtsls' bundled TS 5.9.3 and the tsgo bridge (TS 6). `.vue` files: hover comes from vue-language-server, not covered.
 - ⏳ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
   (toolbar at tab height, Zed list rows, outlined buttons, Zed inputs). UI only: the logic stays as is (user request
   2026-10-14).
@@ -199,6 +202,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/workspace/src/dock.rs` (width) | left dock: `should_resize_all_panels` always true; on panel switch the new panel takes the current width | one shared, resizable sidebar width |
 | `crates/paths/src/paths.rs` | `APP_NAME = "Bolt"` | own dirs: `~/.config/bolt`, `~/Library/Application Support/Bolt`, `~/Library/Logs/Bolt` |
 | `crates/release_channel/src/lib.rs` | `display_name` Bolt…, `app_id` `com.spadari.bolt…` | identity |
+| `crates/release_channel/src/lib.rs` (dev) | debug builds default to the `dev` channel (`ZED_RELEASE_CHANNEL` still overrides) | debug build runs next to the installed Bolt (own instance port + DB) |
 | `crates/zed/src/zed/mac_only_instance.rs` | `BOLT_INSTANCE_PORT_OFFSET = 3000` | no single-instance clash with Zed (Bolt stable uid 501 = 47438) |
 | `crates/zed/Cargo.toml` (rebrand) | `[[bin]] name = "bolt"`, `default-run`, bundle-dev/stable identifier/name, URL scheme `bolt` | binary must match `APP_NAME` (upstream guard in main.rs) |
 | `crates/zed/src/zed/app_menus.rs` (rebrand) | "Bolt" app menu, About/Hide/Quit Bolt | labels |
@@ -238,6 +242,8 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/git_ui/src/git_picker.rs` | "Create From…" button in the branch popover tab bar (action built by name: `bolt_scm` depends on `git_ui`) | VS Code "Create Branch From…" from the footer |
 | `crates/title_bar/Cargo.toml` | `bolt_scm` dep | footer Publish / Sync button |
 | `crates/terminal_view/src/terminal_panel.rs` | "+" in the terminal tab bar = `IconButton` dispatching `workspace::NewTerminal` (was a New Terminal / Spawn Task popover) | user request |
+| `crates/project/src/lsp_command.rs`, `crates/project/src/project.rs` | `GetHover::response_from_lsp` calls `bolt_typescript_hover::expand`; `mod bolt_typescript_hover` | TypeScript hover expanded |
+| `crates/settings_content/src/project.rs`, `crates/project/src/project_settings.rs`, `assets/settings/default.json` | `global_lsp_settings.expand_typescript_hovers` (default true) | TypeScript hover toggle |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -284,3 +290,5 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-15: SCM round 2 (see Backlog). Lesson: for VS Code parity read the VS Code source
   (`microsoft/vscode/extensions/git/src`) before implementing; guessing the publish/sync rules produced a push to
   `main` attempt.
+- 2026-10-15: merge panel dropped from the backlog: Zed's conflict view with VS Code wording (Accept Current / Incoming /
+  Both Changes) is what the user wanted.

@@ -2951,9 +2951,9 @@ impl LspCommand for GetHover {
     async fn response_from_lsp(
         self,
         message: Option<lsp::Hover>,
-        _: Entity<LspStore>,
+        lsp_store: Entity<LspStore>,
         buffer: Entity<Buffer>,
-        _: LanguageServerId,
+        server_id: LanguageServerId,
         cx: AsyncApp,
     ) -> Result<Self::Response> {
         let Some(hover) = message else {
@@ -3012,11 +3012,23 @@ impl LspCommand for GetHover {
             }],
         };
 
-        Ok(Some(Hover {
+        let mut hover = Hover {
             contents,
             range,
             language,
-        }))
+        };
+        // BOLT: TypeScript hovers expanded one level (`global_lsp_settings.expand_typescript_hovers`).
+        crate::bolt_typescript_hover::expand(
+            &mut hover,
+            &lsp_store,
+            server_id,
+            &buffer,
+            self.position,
+            &cx,
+        )
+        .await
+        .log_err();
+        Ok(Some(hover))
     }
 
     fn to_proto(&self, project_id: u64, buffer: &Buffer) -> Self::ProtoRequest {

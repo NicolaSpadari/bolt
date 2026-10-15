@@ -213,6 +213,7 @@ impl ScmPanel {
     ) -> Entity<Self> {
         let project = workspace.project().clone();
         let weak_workspace = workspace.weak_handle();
+        let workspace_entity = cx.entity();
         cx.new(|cx| {
             let git_store = project.read(cx).git_store().clone();
             let subscription = cx.subscribe_in(
@@ -243,6 +244,14 @@ impl ScmPanel {
             );
             let settings_subscription =
                 cx.observe_global::<settings::SettingsStore>(|_, cx| cx.notify());
+            let active_item_subscription = cx.subscribe(
+                &workspace_entity,
+                |this: &mut Self, _, event: &workspace::Event, cx| {
+                    if matches!(event, workspace::Event::ActiveItemChanged) {
+                        this.reveal_active_item(cx);
+                    }
+                },
+            );
             let mut this = Self {
                 workspace: weak_workspace,
                 project,
@@ -259,7 +268,11 @@ impl ScmPanel {
                 open_commit_buffer: None,
                 _commit_editor_subscription: None,
                 prefilled_merge_message: None,
-                _subscriptions: vec![subscription, settings_subscription],
+                _subscriptions: vec![
+                    subscription,
+                    settings_subscription,
+                    active_item_subscription,
+                ],
             };
             this.set_repository(window, cx);
             this
@@ -359,7 +372,70 @@ impl ScmPanel {
         });
     }
 
+    fn selected_entry(&self) -> Option<(SectionKind, &Entry)> {
+        let Some(Row::Entry(section_ix, entry_ix)) = self.selected else {
+            return None;
+        };
+        let section = self.sections.get(section_ix)?;
+        Some((section.kind, section.entries.get(entry_ix)?))
+    }
+
+    /// VS Code's `scm.autoReveal` (`scmViewPane.ts` `onDidActiveEditorChange`): select and reveal the active editor's
+    /// file, searching the groups from the last one (Changes, then Staged, then Merge); keep the selection when the
+    /// file is already selected or not in the list.
+    fn reveal_active_item(&mut self, cx: &mut Context<Self>) {
+        let (Some(workspace), Some(repository)) = (self.workspace.upgrade(), &self.repository)
+        else {
+            return;
+        };
+        let Some(project_path) = workspace
+            .read(cx)
+            .active_item(cx)
+            .and_then(|item| item.project_path(cx))
+        else {
+            return;
+        };
+        let Some(repo_path) = repository
+            .read(cx)
+            .project_path_to_repo_path(&project_path, cx)
+        else {
+            return;
+        };
+        if self
+            .selected_entry()
+            .is_some_and(|(_, entry)| entry.repo_path == repo_path)
+        {
+            return;
+        }
+        let Some((section_ix, entry_ix, kind)) =
+            self.sections
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(section_ix, section)| {
+                    let entry_ix = section
+                        .entries
+                        .iter()
+                        .position(|entry| entry.repo_path == repo_path)?;
+                    Some((section_ix, entry_ix, section.kind))
+                })
+        else {
+            return;
+        };
+        self.collapsed.retain(|collapsed| *collapsed != kind);
+        let row = Row::Entry(section_ix, entry_ix);
+        self.selected = Some(row);
+        if let Some(row_ix) = self.rows().iter().position(|candidate| *candidate == row) {
+            self.scroll_handle
+                .scroll_to_item(row_ix, gpui::ScrollStrategy::Center);
+        }
+        cx.notify();
+    }
+
     fn update_sections(&mut self, cx: &mut Context<Self>) {
+        let previous_selection = self
+            .selected_entry()
+            .map(|(kind, entry)| (kind, entry.repo_path.clone()));
         let mut merge = Vec::new();
         let mut staged = Vec::new();
         let mut changes = Vec::new();
@@ -396,7 +472,20 @@ impl ScmPanel {
             Section { kind, entries }
         })
         .collect();
-        self.selected = None;
+        // Keep the selected file selected across refreshes, like VS Code's tree.
+        self.selected = previous_selection.and_then(|(kind, repo_path)| {
+            self.sections
+                .iter()
+                .enumerate()
+                .filter(|(_, section)| section.kind == kind)
+                .find_map(|(section_ix, section)| {
+                    let entry_ix = section
+                        .entries
+                        .iter()
+                        .position(|entry| entry.repo_path == repo_path)?;
+                    Some(Row::Entry(section_ix, entry_ix))
+                })
+        });
         cx.notify();
     }
 

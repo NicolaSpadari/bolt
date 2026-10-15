@@ -1,4 +1,6 @@
 pub mod agent_registry_store;
+// BOLT: TypeScript hovers expanded one level.
+mod bolt_typescript_hover;
 pub mod agent_server_store;
 pub mod bookmark_store;
 pub mod buffer_store;

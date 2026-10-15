@@ -2792,6 +2792,9 @@
       // Set to 0 to disable auto-dismiss.
       "dismiss_timeout_ms": 5000,
     },
+    // BOLT: Show TypeScript / JavaScript hovers expanded one level, like VS Code's expandable hover
+    // after one "+": hovering an interface or type shows its whole declaration.
+    "expand_typescript_hovers": true,
     // Rules for highlighting semantic tokens. User-defined rules are prepended to the default
     // rules (viewable via "Show Default Semantic Token Rules"), so they take precedence.
     //

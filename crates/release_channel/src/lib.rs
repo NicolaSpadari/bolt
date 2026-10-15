@@ -12,7 +12,9 @@ const ZED_DOCS_URL: &str = "https://zed.dev/docs";
 /// stable | dev | nightly | preview
 pub static RELEASE_CHANNEL_NAME: LazyLock<String> = LazyLock::new(|| {
     if cfg!(debug_assertions) {
-        env::var("ZED_RELEASE_CHANNEL").unwrap_or_else(|_| compile_time_release_channel_name())
+        // BOLT: debug builds default to the dev channel (own instance port and DB), so they run next to the installed
+        // Bolt; upstream's stable tags ship `RELEASE_CHANNEL` = stable.
+        env::var("ZED_RELEASE_CHANNEL").unwrap_or_else(|_| "dev".to_string())
     } else {
         compile_time_release_channel_name()
     }

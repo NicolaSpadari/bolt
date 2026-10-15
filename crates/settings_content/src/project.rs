@@ -347,6 +347,11 @@ pub struct GlobalLspSettingsContent {
     pub notifications: Option<LspNotificationSettingsContent>,
     /// Rules for rendering LSP semantic tokens.
     pub semantic_token_rules: Option<SemanticTokenRules>,
+    /// BOLT: Show TypeScript / JavaScript hovers (vtsls) expanded one level, like VS Code's expandable hover after one
+    /// "+": hovering an interface or type shows its whole declaration.
+    ///
+    /// Default: `true`
+    pub expand_typescript_hovers: Option<bool>,
 }
 
 #[with_fallible_options]

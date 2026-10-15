@@ -16,12 +16,14 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
   (`bolt_scm`) with Merge Branch (`git merge --no-commit --no-ff`) and Create Branch From…; `git_panel.bolt_panel`
   switch (default Bolt's panel); release bundle script + first clean release build.
 - 2026-10-15: SCM round 2 (fetch/pull/push/sync from `bolt_scm`, VS Code action button + status bar sync/publish,
-  `--no-track` Create Branch From, merge message prefill, placeholder ellipsis). Verified by the user.
+  `--no-track` Create Branch From, merge message prefill, placeholder ellipsis). Verified by the user. Then: terminal
+  "+" opens a terminal directly; TypeScript hover expanded one level (`expand_typescript_hovers`); SCM auto-reveal of
+  the active file; debug builds on the `dev` channel (run next to the installed Bolt).
 
 ### Current State
 - All work committed and pushed on `main`. Release bundle rebuilt on 2026-10-14 (`target/release/Bolt.app`); the copy in
   /Applications is replaced only when the user asks (quit Bolt first).
-- Dev: `cargo build` → `./target/debug/bolt <path>` (incremental 10 s–2 min; touching `editor`/`project`/`settings_content`
+- Dev: `cargo build` → `./target/debug/bolt <path>` (dev channel: runs next to /Applications/Bolt.app, own DB) (incremental 10 s–2 min; touching `editor`/`project`/`settings_content`
   rebuilds most of the tree). The user prefers debug builds for checks.
 - User test project: `~/Smartness/smartness-pms-webapp` ("PMS v4"). Its `typescript` is `typescript-native-bridge`
   (tsgo), used by vtsls.
@@ -45,8 +47,7 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - `.rules` contains a block injected by the context-mode plugin: never commit it.
 
 ### Next Steps (wait for the user to pick)
-1. Backlog (PROGRESS): TypeScript hover
-   always expanded, merge panel, search panel UI restyle (Zed-native, UI only), lighter builds via Cargo features
+1. Backlog (PROGRESS): search panel UI restyle (Zed-native, UI only), lighter builds via Cargo features
    (later), `script/bolt-sync` (upstream sync, P0).
 2. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).
 
