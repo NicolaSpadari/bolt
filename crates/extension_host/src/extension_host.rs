@@ -2351,11 +2351,12 @@ async fn load_plugin_language(
             })
         }
     };
-    let (config, queries, context_provider) = futures::try_join!(
+    let (config, mut queries, context_provider) = futures::try_join!(
         config,
         async move { Ok(load_plugin_queries(fs, &language_path, query_files).await) },
         async move { Ok(context_provider.await) }
     )?;
+    bolt_patch_vue_indents(&config, &mut queries);
 
     Ok(LoadedLanguage {
         config,
@@ -2381,6 +2382,21 @@ async fn discover_query_files(fs: Arc<dyn Fs>, root_path: &Path) -> Result<Query
         query_files.insert(query_file.into());
     }
     Ok(query_files)
+}
+
+// BOLT: the Vue extension indents only template elements, so the first line after `<script>` lands at column 0
+// and ESLint's `vue/script-indent` `baseIndent: 1` is lost while typing. One indent level inside `<script>` (the
+// injected TypeScript adds its own levels on top). Skipped when the extension already handles `script_element`.
+const BOLT_VUE_SCRIPT_INDENT: &str = "\n(script_element\n  (start_tag) @start\n  (end_tag)? @end) @indent\n";
+
+fn bolt_patch_vue_indents(config: &LanguageConfig, queries: &mut LanguageQueries) {
+    if config.name.as_ref() != "Vue.js" {
+        return;
+    }
+    let indents = queries.indents.get_or_insert_with(Default::default);
+    if !indents.contains("script_element") {
+        indents.to_mut().push_str(BOLT_VUE_SCRIPT_INDENT);
+    }
 }
 
 async fn load_plugin_queries(

@@ -42280,6 +42280,7 @@ async fn test_inlay_hints_request_timeout(cx: &mut TestAppContext) {
                     button: Some(true),
                     notifications: None,
                     semantic_token_rules: None,
+                    expand_typescript_hovers: None,
                 });
             });
         });
@@ -42383,6 +42384,7 @@ async fn test_inlay_hints_request_timeout(cx: &mut TestAppContext) {
                     button: Some(true),
                     notifications: None,
                     semantic_token_rules: None,
+                    expand_typescript_hovers: None,
                 });
             });
         });

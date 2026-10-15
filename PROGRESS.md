@@ -159,12 +159,15 @@ file is upstream's hottest (46 commits / 3 months).
   - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
     the panel as a truncated `Label` (ellipsis).
 - ✅ Terminal panel "+" opens a new terminal directly (no New Terminal / Spawn Task menu) (user request 2026-10-15).
-- 🧪 Vue `<script>` indentation (user request 2026-10-15, ESLint `vue/script-indent` `baseIndent: 1`), root causes
-  measured with a scratch test on the real Vue extension + injected TypeScript: (1) vue-language-server's on-type
-  formatting (`;`, `}`, newline) reindents `<script>` without its base indent (`vue.format.script.initialIndent`
-  false) → Bolt default `use_on_type_format: false` for Vue.js, like VS Code's `formatOnType` off; (2) the Vue
-  extension's indents query has no `script_element` rule → first line after `<script>` at column 0; Bolt appends the
-  rule when loading the extension (`bolt_patch_vue_indents`). Candidate upstream PR for zed-extensions/vue.
+- ✅ Vue `<script>` indentation (user request 2026-10-15, ESLint `vue/script-indent` `baseIndent: 1`, verified by the
+  user). Root causes measured with a scratch test on the real Vue extension + injected TypeScript: (1)
+  vue-language-server's on-type formatting (`;`, `}`, newline) reindents `<script>` without its base indent
+  (`vue.format.script.initialIndent` false) → Bolt default `use_on_type_format: false` for Vue.js (like VS Code's
+  `formatOnType` off), and Zed fix: inside `<script>` the setting was read for the injected TypeScript, so the Vue.js
+  `false` was ignored → on-type format now needs both the cursor language and the buffer language to allow it; (2)
+  the Vue extension's indents query has no `script_element` rule → first line after `<script>` at column 0 → Bolt
+  appends the rule when loading the extension (`bolt_patch_vue_indents`). Optional upstream PRs: (1) to Zed, (2) to
+  zed-extensions/vue.
 - ✅ SCM auto-reveal (user request 2026-10-15): switching tab selects and reveals the active file in the panel, like
   VS Code's `scm.autoReveal` (`scmViewPane.ts` `onDidActiveEditorChange`: groups searched from the last one, selection
   kept when already selected or not listed); the selection also survives panel refreshes.
@@ -214,6 +217,8 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/settings_ui/{Cargo.toml,src/settings_ui.rs,src/pages.rs,src/components.rs,src/components/section_items.rs}` | feature `ai`; AI pages / Ollama picker replaced by stand-ins in `bolt_no_ai.rs` (new file) without it; 2 `allow(dead_code)` | lighter builds |
 | `crates/language_tools/{Cargo.toml,src/lsp_log_view.rs}` | feature `ai` (Copilot server in the LSP log) | lighter builds |
 | `crates/extension_host/src/extension_host.rs` | `bolt_patch_vue_indents` after loading extension queries | Vue `<script>` base indent |
+| `crates/editor/src/completions.rs` | on-type formatting only if both the language at the cursor and the buffer language allow it | Vue `<script>` base indent |
+| `crates/editor/src/editor_tests.rs` | `expand_typescript_hovers: None` in two `GlobalLspSettingsContent` literals | tests compile with the hover setting |
 | `assets/settings/default.json` (Vue) | `Vue.js.use_on_type_format: false` | Vue `<script>` base indent |
 | `crates/zed/src/zed/mac_only_instance.rs` | `BOLT_INSTANCE_PORT_OFFSET = 3000` | no single-instance clash with Zed (Bolt stable uid 501 = 47438) |
 | `crates/zed/Cargo.toml` (rebrand) | `[[bin]] name = "bolt"`, `default-run`, bundle-dev/stable identifier/name, URL scheme `bolt` | binary must match `APP_NAME` (upstream guard in main.rs) |

@@ -2639,6 +2639,9 @@
     },
     "Vue.js": {
       "language_servers": ["vue-language-server", "vtsls", "..."],
+      // BOLT: like VS Code (`editor.formatOnType` off). vue-language-server's on-type formatting reindents
+      // `<script>` without its base indent (`vue.format.script.initialIndent`), moving lines to column 0.
+      "use_on_type_format": false,
       "prettier": {
         "allowed": true,
       },

@@ -208,7 +208,12 @@ impl Editor {
             .text_anchor_for_position(position, cx)?;
 
         let settings = LanguageSettings::for_buffer_at(&buffer.read(cx), buffer_position, cx);
-        if !settings.use_on_type_format {
+        // BOLT: the request goes to the buffer's language servers, so the buffer's own language must allow it too:
+        // inside a Vue `<script>` the language at the cursor is the injected TypeScript, which ignored
+        // `languages."Vue.js".use_on_type_format: false` (vue-language-server then moved lines to column 0).
+        if !settings.use_on_type_format
+            || !LanguageSettings::for_buffer(buffer.read(cx), cx).use_on_type_format
+        {
             return None;
         }
 
