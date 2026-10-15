@@ -247,9 +247,11 @@ file is upstream's hottest (46 commits / 3 months).
   `BranchItem.description` (`commands.ts`: `behind↓ ahead↑`, then the date; used by checkout, merge, delete). Unlike
   VS Code, zero counts are hidden (user: less clutter), nothing shown when in sync. Zed's branch switcher: next to the name (upstream touch); Bolt's Merge / Create From / Delete pickers:
   between name and date. Data from Zed's `for-each-ref %(upstream:track)` (fresh after a fetch). Verified by the user.
-- 🚧 Empty editor area (project open, no tab): Zed's welcome page as is (Bolt logo, Get Started / Recent Projects,
+- ⏳ Empty editor area (project open, no tab): Zed's welcome page as is (Bolt logo, Get Started / Recent Projects,
   same actions), like the screen of a new empty window; before it was blank (user request 2026-10-15, like VS Code /
-  Cursor's empty state). Built, waiting for the user's check.
+  Cursor's empty state). Not working yet (user, release 2026-10-15): start with tabs open, close them → still blank. Likely cause to check:
+  only the pane created in `Workspace::new` gets `set_should_display_welcome_page(true)`; the center panes restored
+  from the DB (workspace persistence) are new `Pane`s without it. Later (user).
 - Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
