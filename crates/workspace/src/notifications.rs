@@ -1210,7 +1210,7 @@ pub mod simple_message_notification {
             });
 
             let with_primary_action = cx.new(|cx| {
-                MessageNotification::new("A new version of Zed is available for download.", cx)
+                MessageNotification::new("A new version of Bolt is available for download.", cx) // BOLT
                     .with_title("Update Available")
                     .primary_message("Restart Now")
                     .primary_icon(IconName::ArrowCircle)

@@ -73,9 +73,9 @@ impl MoveToApplicationsRequest {
         let response = cx
             .prompt(
                 PromptLevel::Info,
-                "Move Zed to Applications?",
+                "Move Bolt to Applications?", // BOLT
                 Some(
-                    "Zed is running from a temporary location. Move it to Applications to finish installing it.",
+                    "Bolt is running from a temporary location. Move it to Applications to finish installing it.", // BOLT
                 ),
                 &[
                     PromptButton::ok("Yes"),
@@ -103,7 +103,7 @@ impl MoveToApplicationsRequest {
                         .ok();
                     cx.prompt(
                         PromptLevel::Critical,
-                        "Failed to move Zed to Applications",
+                        "Failed to move Bolt to Applications", // BOLT
                         Some(&error.to_string()),
                         &["OK"],
                     )

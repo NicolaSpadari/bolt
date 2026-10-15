@@ -47,7 +47,8 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
 - Default icon theme: **Material Icon Theme bundled natively** (no extension), copied from
   `zed-extensions/material-icon-theme` (Apache-2.0, LICENSE shipped next to it). Rendered in color straight from the
   embedded assets (no extraction to disk). Refreshed with `script/bolt-update-icons`, `crates/bolt_scm/`, `assets/icons/bolt/git_merge.svg` (Lucide, ISC), `script/bolt-update-file-nesting`, `crates/project_panel/src/bolt_nesting*` (code, antfu block verbatim `.jsonc`, MIT LICENSE), `script/bolt-generate-icons.swift` (gradient tile since 2026-10-14), `crates/zed/resources/bolt-icon.*`, `crates/bolt_iconify/`, `script/bolt-theme-from-vscode`, app-icon PNGs (replaced), independent of upstream syncs.
-- All Bolt work is committed directly on `main` (no feature branches).
+- Branches (2026-10-15, user decision): `bolt` = all Bolt work (GitHub default branch); `main` = plain Zed, only
+  fast-forwarded to Zed stable tags, never committed to. Syncs merge `main` into `bolt` (`notes/upstream-sync.md`).
 
 ## Open decisions (ask the user before acting)
 - none
@@ -159,6 +160,18 @@ file is upstream's hottest (46 commits / 3 months).
   - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
     the panel as a truncated `Label` (ellipsis).
 - ✅ Terminal panel "+" opens a new terminal directly (no New Terminal / Spawn Task menu) (user request 2026-10-15).
+- ✅ Rebrand pass (2026-10-15, map in `notes/rebrand-map.md`): Bolt logo (`VectorName::BoltLogo`,
+  `assets/images/bolt_logo.svg` = app icon glyph) and "Welcome to Bolt" on the welcome page / onboarding; "About Bolt",
+  "Bolt — Settings"; Help menu without Zed bug report / feature request / email / Twitter / jobs (keeps "Zed
+  Documentation", "Zed Repository"); ~40 visible strings (settings descriptions, extensions banners, move to
+  Applications, update / CLI / trust messages, Keyboard Context); macOS permission prompts and "Bolt Text Document";
+  Document.icns = Bolt app icon (bundle script); `bolt://` links handled like `zed://`. Kept on purpose: identifiers
+  (`zed_actions`, `.zed/`, `ZED_*`, settings keys), "Zed (Default)" keymap name, Zed server / Zeta / Edit
+  Predictions texts, Zed's DMG + auto-update (unused by Bolt).
+- ✅ Merge / Create Branch From pickers sorted by most recent commit (VS Code `git.branchSortOrder` default
+  `committerdate`, checked in `extensions/git/package.json`).
+- ✅ SCM and search rows: row actions are rendered only for the hovered row (`hovered_row` + `on_hover`), so names are
+  not cut. Gotcha: toggling `display` with `group_hover` styles panics in GPUI ("must call prepaint before paint").
 - ✅ Vue `<script>` indentation (user request 2026-10-15, ESLint `vue/script-indent` `baseIndent: 1`, verified by the
   user). Root causes measured with a scratch test on the real Vue extension + injected TypeScript: (1)
   vue-language-server's on-type formatting (`;`, `}`, newline) reindents `<script>` without its base indent
@@ -180,13 +193,15 @@ file is upstream's hottest (46 commits / 3 months).
 - ✅ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
   (toolbar at tab height, Zed list rows, outlined buttons, Zed inputs). UI only: the logic stays as is (user request
   2026-10-14).
-- 🧪 Lighter builds (2026-10-15): `zed` Cargo features, all off by default: `repl`, `debugger` (`dap_adapters`,
+- ✅ Lighter builds (2026-10-15): `zed` Cargo features, all off by default: `repl`, `debugger` (`dap_adapters`,
   `debug_adapter_extension`, `debugger_tools`, `debugger_ui`), `ai` (agent, agent_ui, acp_*, language_models,
   copilot*, edit_prediction*, codestral, web_search*, sidebar; enables `settings_ui/ai` and `language_tools/ai`),
   `collab` (`collab_ui`). 1056 → 959 crates (debug and release). `call` / `channel` stay (−2 crates, 4 more upstream
   crates to touch). Built-in keymaps skip bindings to actions not in the build. Check with all features on:
-  `cargo check -p zed --features ai,collab,repl,debugger`. Gotcha: verify startup with stderr captured (a keymap panic
-  is not in Bolt.log).
+  `cargo check -p zed --features ai,collab,repl,debugger`. Gotchas: verify startup with stderr captured (a keymap panic
+  is not in Bolt.log); an excluded crate's `init` may also set up unrelated things (`collab_ui::init` initializes the
+  title bar → without `collab` Bolt calls `title_bar::init` itself; missing title bar = no window drag, no footer
+  project/branch): check what each gated `init` calls. `cargo test -p zed --no-run` must build without features.
 - Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
@@ -218,6 +233,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/language_tools/{Cargo.toml,src/lsp_log_view.rs}` | feature `ai` (Copilot server in the LSP log) | lighter builds |
 | `crates/extension_host/src/extension_host.rs` | `bolt_patch_vue_indents` after loading extension queries | Vue `<script>` base indent |
 | `crates/editor/src/completions.rs` | on-type formatting only if both the language at the cursor and the buffer language allow it | Vue `<script>` base indent |
+| rebrand (`// BOLT` on each line): `crates/ui/src/components/image.rs` (`BoltLogo`), `crates/workspace/src/{welcome.rs,notifications.rs,workspace.rs}`, `crates/onboarding/src/{onboarding.rs,basics_page.rs}`, `crates/zed/src/zed.rs` (About), `crates/zed/src/zed/{app_menus.rs,move_to_applications.rs,open_listener.rs}`, `crates/settings_ui/src/{settings_ui.rs,page_data.rs,pages/sandbox_settings.rs}`, `crates/extensions_ui/src/{extensions_ui.rs,components/extension_card.rs}`, `crates/language_tools/src/key_context_view.rs`, `crates/auto_update/src/auto_update.rs`, `crates/install_cli/src/install_cli_binary.rs`, `crates/zed/resources/info/{Permissions,DocumentTypes}.plist` | "Zed" → "Bolt" in visible text, Bolt logo, Help menu, `bolt://` alias | rebrand (on sync: re-check new "Zed" strings with `notes/rebrand-map.md`) |
 | `crates/editor/src/editor_tests.rs` | `expand_typescript_hovers: None` in two `GlobalLspSettingsContent` literals | tests compile with the hover setting |
 | `assets/settings/default.json` (Vue) | `Vue.js.use_on_type_format: false` | Vue `<script>` base indent |
 | `crates/zed/src/zed/mac_only_instance.rs` | `BOLT_INSTANCE_PORT_OFFSET = 3000` | no single-instance clash with Zed (Bolt stable uid 501 = 47438) |
@@ -309,3 +325,6 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   `main` attempt.
 - 2026-10-15: merge panel dropped from the backlog: Zed's conflict view with VS Code wording (Accept Current / Incoming /
   Both Changes) is what the user wanted.
+- 2026-10-15: branch split: `bolt` created from main (`3cdc9304ef`), GitHub default branch = `bolt`; `main` back to Zed
+  v1.23.3 pending (force push blocked by the agent permissions: the user runs it). Rebrand pass, branch pickers by
+  recency, SCM/search row actions only on hover, title bar fix (`collab_ui::init` also inits it).

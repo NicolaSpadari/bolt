@@ -33,10 +33,6 @@ use feature_flags::{FeatureFlagAppExt as _, PanicFeatureFlag};
 use fs::Fs;
 #[cfg(feature = "ai")]
 use futures::FutureExt as _;
-#[cfg(feature = "ai")]
-use gpui::AsyncWindowContext;
-#[cfg(feature = "ai")]
-use workspace::Panel;
 use futures::{StreamExt, channel::mpsc, select_biased};
 use git_ui::branch_diff::BranchDiffToolbar;
 use git_ui::commit_view::CommitViewToolbar;
@@ -46,12 +42,14 @@ use git_ui::solo_diff_view::{SoloDiffGitToolbar, SoloDiffStyleToolbar};
 use git_ui::staged_diff::StagedDiffToolbar;
 use git_ui::unstaged_diff::UnstagedDiffToolbar;
 use git_ui_core::file_diff_view::FileDiffStyleToolbar;
+#[cfg(feature = "ai")]
+use gpui::AsyncWindowContext;
 use gpui::{
-    Action, App, AppContext as _, ClipboardItem, Context, DismissEvent,
-    Element, Entity, FocusHandle, Focusable, Image, ImageFormat, KeyBinding, ParentElement,
-    PathPromptOptions, PromptLevel, ReadGlobal, SharedString, Size, Task, TaskExt, TitlebarOptions,
-    UpdateGlobal, WeakEntity, Window, WindowBounds, WindowHandle, WindowKind, WindowOptions,
-    actions, image_cache, img, point, px, retain_all,
+    Action, App, AppContext as _, ClipboardItem, Context, DismissEvent, Element, Entity,
+    FocusHandle, Focusable, Image, ImageFormat, KeyBinding, ParentElement, PathPromptOptions,
+    PromptLevel, ReadGlobal, SharedString, Size, Task, TaskExt, TitlebarOptions, UpdateGlobal,
+    WeakEntity, Window, WindowBounds, WindowHandle, WindowKind, WindowOptions, actions,
+    image_cache, img, point, px, retain_all,
 };
 use image_viewer::ImageInfo;
 use language::Capability;
@@ -86,6 +84,8 @@ use settings::{
 };
 #[cfg(feature = "ai")]
 use sidebar::Sidebar;
+#[cfg(feature = "ai")]
+use workspace::Panel;
 #[cfg(debug_assertions)]
 use workspace::workspace_error::{ErrorAction, ErrorSeverity, WorkspaceError};
 
@@ -107,9 +107,9 @@ use vim_mode_setting::VimModeSetting;
 use workspace::notifications::{NotificationId, dismiss_app_notification, show_app_notification};
 
 use workspace::{
-    AppState, MultiWorkspace, NewFile, NewWindow, OpenLog, Toast, Workspace,
-    WorkspaceSettings, create_and_open_local_file,
-    notifications::simple_message_notification::MessageNotification, open_new,
+    AppState, MultiWorkspace, NewFile, NewWindow, OpenLog, Toast, Workspace, WorkspaceSettings,
+    create_and_open_local_file, notifications::simple_message_notification::MessageNotification,
+    open_new,
 };
 use workspace::{CloseProject, CloseWindow, RestoreBanner, with_active_or_new_workspace};
 use workspace::{Pane, notifications::DetachAndPromptErr};
@@ -512,9 +512,9 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
         // BOLT: agent panel and threads sidebar only with the `ai` Cargo feature.
         #[cfg(feature = "ai")]
         {
-        let window_handle = window.window_handle();
-        let multi_workspace_handle = cx.entity();
-        cx.subscribe_in(
+            let window_handle = window.window_handle();
+            let multi_workspace_handle = cx.entity();
+            cx.subscribe_in(
             &multi_workspace_handle,
             window,
             |this, _multi_workspace, event: &workspace::MultiWorkspaceEvent, window, cx| {
@@ -546,17 +546,17 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
         )
         .detach();
 
-        cx.defer(move |cx| {
-            window_handle
-                .update(cx, |_, window, cx| {
-                    let sidebar =
-                        cx.new(|cx| Sidebar::new(multi_workspace_handle.clone(), window, cx));
-                    multi_workspace_handle.update(cx, |multi_workspace, cx| {
-                        multi_workspace.register_sidebar(sidebar, cx);
-                    });
-                })
-                .ok();
-        });
+            cx.defer(move |cx| {
+                window_handle
+                    .update(cx, |_, window, cx| {
+                        let sidebar =
+                            cx.new(|cx| Sidebar::new(multi_workspace_handle.clone(), window, cx));
+                        multi_workspace_handle.update(cx, |multi_workspace, cx| {
+                            multi_workspace.register_sidebar(sidebar, cx);
+                        });
+                    })
+                    .ok();
+            });
         }
     })
     .detach();
@@ -1757,7 +1757,7 @@ fn open_about_window(cx: &mut App) {
     cx.open_window(
         WindowOptions {
             titlebar: Some(TitlebarOptions {
-                title: Some("About Zed".into()),
+                title: Some("About Bolt".into()), // BOLT
                 appears_transparent: true,
                 traffic_light_position: Some(point(px(12.), px(12.))),
             }),
@@ -6262,15 +6262,20 @@ mod tests {
             release_channel::init(Version::new(0, 0, 0), cx);
             command_palette::init(cx);
             editor::init(cx);
+            // BOLT: collaboration and AI only with their Cargo features (`collab_ui::init` also initializes the
+            // title bar).
+            #[cfg(feature = "collab")]
             collab_ui::init(&app_state, cx);
+            #[cfg(not(feature = "collab"))]
+            title_bar::init(cx);
             git_ui::init(cx);
             project_panel::init(cx);
             outline_panel::init(cx);
             terminal_view::init(cx);
-            let credentials_provider = zed_credentials_provider::global(cx);
+            #[cfg(feature = "ai")]
             copilot_chat::init(
                 app_state.client.http_client(),
-                credentials_provider,
+                zed_credentials_provider::global(cx),
                 copilot_chat::CopilotChatConfiguration::default(),
                 cx,
             );
@@ -6281,9 +6286,12 @@ mod tests {
                 app_state.user_store.clone(),
                 cx,
             );
-            language_models::init(app_state.user_store.clone(), app_state.client.clone(), cx);
-            web_search::init(cx);
-            web_search_providers::init(app_state.client.clone(), app_state.user_store.clone(), cx);
+            #[cfg(feature = "ai")]
+            {
+                language_models::init(app_state.user_store.clone(), app_state.client.clone(), cx);
+                web_search::init(cx);
+                web_search_providers::init(app_state.client.clone(), app_state.user_store.clone(), cx);
+            }
             let prompt_builder = PromptBuilder::load(app_state.fs.clone(), false, cx);
             project::AgentRegistryStore::init_global(
                 cx,

@@ -1,4 +1,4 @@
-# Rebrand map — Zed branding still visible in Bolt (mapped 2026-10-15, not done yet)
+# Rebrand map — Zed branding visible in Bolt (mapped and done 2026-10-15; use it to re-check after each Zed sync)
 
 Approach: replace hard-coded "Zed" in user-visible text with `ReleaseChannel::global(cx).display_name()` (already
 "Bolt") or a literal "Bolt"; mark every edit `BOLT:` and list it in PROGRESS "Upstream touch points". Only items in the

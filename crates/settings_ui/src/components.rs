@@ -9,6 +9,8 @@ mod ollama_model_picker;
 mod section_items;
 mod theme_picker;
 
+#[cfg(not(feature = "ai"))]
+pub use crate::bolt_no_ai::render_ollama_model_picker;
 pub use dropdown::*;
 pub use font_picker::font_picker;
 pub use icon_theme_picker::icon_theme_picker;
@@ -16,7 +18,5 @@ pub use input_field::*;
 pub use number_field::*;
 #[cfg(feature = "ai")]
 pub use ollama_model_picker::render_ollama_model_picker;
-#[cfg(not(feature = "ai"))]
-pub use crate::bolt_no_ai::render_ollama_model_picker;
 pub use section_items::*;
 pub use theme_picker::theme_picker;

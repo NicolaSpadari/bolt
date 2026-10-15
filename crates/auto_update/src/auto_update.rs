@@ -314,7 +314,7 @@ pub fn check(_: &Check, window: &mut Window, cx: &mut App) {
     {
         drop(window.prompt(
             gpui::PromptLevel::Info,
-            "Zed was installed via a package manager.",
+            "Bolt was installed via a package manager.", // BOLT
             Some(&message),
             &["OK"],
             cx,

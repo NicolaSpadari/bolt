@@ -293,29 +293,15 @@ pub fn app_menus(cx: &mut App) -> Vec<Menu> {
                 MenuItem::action("View Dependency Licenses", zed_actions::OpenLicenses),
                 MenuItem::action("Show Welcome", onboarding::ShowWelcome),
                 MenuItem::separator(),
-                MenuItem::action("File Bug Report...", zed_actions::feedback::FileBugReport),
-                MenuItem::action("Request Feature...", zed_actions::feedback::RequestFeature),
-                MenuItem::action("Email Us...", zed_actions::feedback::EmailZed),
-                MenuItem::separator(),
+                // BOLT: no bug reports / feature requests / email / Twitter / jobs (they go to Zed); Zed's docs and
+                // repository stay as references for the base editor.
                 MenuItem::action(
-                    "Documentation",
+                    "Zed Documentation",
                     super::OpenBrowser {
                         url: "https://zed.dev/docs".into(),
                     },
                 ),
                 MenuItem::action("Zed Repository", feedback::OpenZedRepo),
-                MenuItem::action(
-                    "Zed Twitter",
-                    super::OpenBrowser {
-                        url: "https://twitter.com/zeddotdev".into(),
-                    },
-                ),
-                MenuItem::action(
-                    "Join the Team",
-                    super::OpenBrowser {
-                        url: "https://zed.dev/jobs".into(),
-                    },
-                ),
             ],
         },
     ]

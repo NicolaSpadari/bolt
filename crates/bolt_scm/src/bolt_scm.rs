@@ -186,6 +186,7 @@ pub struct ScmPanel {
     sections: Vec<Section>,
     collapsed: Vec<SectionKind>,
     selected: Option<Row>,
+    hovered_row: Option<Row>,
     scroll_handle: UniformListScrollHandle,
     pending_commit: Option<Task<()>>,
     pending_remote: Option<RemoteOperation>,
@@ -261,6 +262,7 @@ impl ScmPanel {
                 sections: Vec::new(),
                 collapsed: Vec::new(),
                 selected: None,
+                hovered_row: None,
                 scroll_handle: UniformListScrollHandle::new(),
                 pending_commit: None,
                 pending_remote: None,
@@ -1499,7 +1501,7 @@ impl ScmPanel {
         let group: SharedString = format!("bolt-scm-section-{section_ix}").into();
         h_flex()
             .id(("bolt-scm-section", section_ix))
-            .group(group.clone())
+            .group(group)
             .h(LIST_ITEM_HEIGHT)
             .w_full()
             .pl_2p5()
@@ -1529,15 +1531,34 @@ impl ScmPanel {
             .child(
                 h_flex()
                     .gap_1()
-                    .child(div().visible_on_hover(group).child(actions))
+                    .when(self.hovered_row == Some(Row::Header(section_ix)), |this| {
+                        this.child(div().flex_none().child(actions))
+                    })
                     .child(
                         Label::new(section.entries.len().to_string())
                             .color(Color::Muted)
                             .size(LabelSize::Small),
                     ),
             )
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                this.set_hovered_row(Row::Header(section_ix), *hovered, cx)
+            }))
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.toggle_section(kind, cx)))
             .into_any_element()
+    }
+
+    /// Row actions are only rendered for the hovered row, so they take no space otherwise (VS Code). Toggling their
+    /// visibility with `group_hover` styles instead panics in GPUI (layout changes between prepaint and paint).
+    fn set_hovered_row(&mut self, row: Row, hovered: bool, cx: &mut Context<Self>) {
+        if hovered {
+            if self.hovered_row != Some(row) {
+                self.hovered_row = Some(row);
+                cx.notify();
+            }
+        } else if self.hovered_row == Some(row) {
+            self.hovered_row = None;
+            cx.notify();
+        }
     }
 
     fn toggle_section(&mut self, kind: SectionKind, cx: &mut Context<Self>) {
@@ -1685,7 +1706,7 @@ impl ScmPanel {
 
         h_flex()
             .id(("bolt-scm-entry", id))
-            .group(group.clone())
+            .group(group)
             .h(LIST_ITEM_HEIGHT)
             .w_full()
             .pl_2p5()
@@ -1700,7 +1721,13 @@ impl ScmPanel {
                 })
             })
             .child(name_row)
-            .child(div().flex_none().visible_on_hover(group).child(actions))
+            .when(
+                self.hovered_row == Some(Row::Entry(section_ix, entry_ix)),
+                |this| this.child(div().flex_none().child(actions)),
+            )
+            .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                this.set_hovered_row(Row::Entry(section_ix, entry_ix), *hovered, cx)
+            }))
             .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
                 this.open_diff(section_ix, entry_ix, window, cx)
             }))

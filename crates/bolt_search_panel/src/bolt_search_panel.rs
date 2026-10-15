@@ -147,6 +147,7 @@ pub struct SearchPanel {
     limit_reached: bool,
     error: Option<SharedString>,
     selected_row: Option<Row>,
+    hovered_row: Option<Row>,
     scroll_handle: UniformListScrollHandle,
     pending_search: Option<Task<()>>,
     debounce: Option<Task<()>>,
@@ -253,6 +254,7 @@ impl SearchPanel {
                 limit_reached: false,
                 error: None,
                 selected_row: None,
+                hovered_row: None,
                 scroll_handle: UniformListScrollHandle::new(),
                 pending_search: None,
                 debounce: None,
@@ -987,6 +989,20 @@ impl SearchPanel {
         )
     }
 
+    /// Row actions are only rendered for the hovered row, so they take no space otherwise (VS Code). Toggling their
+    /// visibility with `group_hover` styles instead panics in GPUI (layout changes between prepaint and paint).
+    fn set_hovered_row(&mut self, row: Row, hovered: bool, cx: &mut Context<Self>) {
+        if hovered {
+            if self.hovered_row != Some(row) {
+                self.hovered_row = Some(row);
+                cx.notify();
+            }
+        } else if self.hovered_row == Some(row) {
+            self.hovered_row = None;
+            cx.notify();
+        }
+    }
+
     /// A list row styled like the source control panel's entries.
     fn row_container(
         &self,
@@ -1055,7 +1071,7 @@ impl SearchPanel {
                     );
                 self.row_container(
                     ElementId::NamedInteger("bolt-search-file".into(), file_ix as u64),
-                    group.clone(),
+                    group,
                     is_selected,
                     cx,
                 )
@@ -1090,7 +1106,12 @@ impl SearchPanel {
                                 ),
                         ),
                 )
-                .child(div().flex_none().visible_on_hover(group).child(actions))
+                .when(self.hovered_row == Some(Row::File(file_ix)), |this| {
+                    this.child(div().flex_none().child(actions))
+                })
+                .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                    this.set_hovered_row(Row::File(file_ix), *hovered, cx)
+                }))
                 .child(
                     Label::new(file.matches.len().to_string())
                         .size(LabelSize::Small)
@@ -1137,7 +1158,7 @@ impl SearchPanel {
                     );
                 self.row_container(
                     ElementId::NamedInteger("bolt-search-match".into(), id as u64),
-                    group.clone(),
+                    group,
                     is_selected,
                     cx,
                 )
@@ -1152,7 +1173,13 @@ impl SearchPanel {
                         .text_ui(cx)
                         .child(render_preview(search_match, replacement, cx)),
                 )
-                .child(div().flex_none().visible_on_hover(group).child(actions))
+                .when(
+                    self.hovered_row == Some(Row::Match(file_ix, match_ix)),
+                    |this| this.child(div().flex_none().child(actions)),
+                )
+                .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                    this.set_hovered_row(Row::Match(file_ix, match_ix), *hovered, cx)
+                }))
                 .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
                     let double_click = event.click_count() > 1;
                     this.open_match(file_ix, match_ix, double_click, !double_click, window, cx);

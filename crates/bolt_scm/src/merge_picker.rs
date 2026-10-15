@@ -27,13 +27,22 @@ pub(crate) fn open(
     let Some(repository) = workspace.project().read(cx).active_repository(cx) else {
         return;
     };
-    let branches: Vec<Branch> = repository
+    let mut branches: Vec<Branch> = repository
         .read(cx)
         .branch_list
         .iter()
         .filter(|branch| mode == Mode::CreateFrom || !branch.is_head)
         .cloned()
         .collect();
+    // VS Code's default `git.branchSortOrder` (`committerdate`): most recent commit first.
+    branches.sort_by_key(|branch| {
+        std::cmp::Reverse(
+            branch
+                .most_recent_commit
+                .as_ref()
+                .map(|commit| commit.commit_timestamp),
+        )
+    });
     let current = repository
         .read(cx)
         .branch

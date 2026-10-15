@@ -21,6 +21,8 @@ pub enum VectorName {
     StudentStamp,
     ZedLogo,
     ZedXCopilot,
+    // BOLT: Bolt logo (`images/bolt_logo.svg`, same glyph as the app icon).
+    BoltLogo,
 }
 
 impl VectorName {

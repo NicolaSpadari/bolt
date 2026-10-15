@@ -347,11 +347,12 @@ impl Render for Onboarding {
                                     .child(
                                         h_flex()
                                             .gap_4()
-                                            .child(Vector::square(VectorName::ZedLogo, rems(2.5)))
+                                            // BOLT: Bolt logo.
+                    .child(Vector::square(VectorName::BoltLogo, rems(2.5)))
                                             .child(
                                                 v_flex()
                                                     .child(
-                                                        Headline::new("Welcome to Zed")
+                                                        Headline::new("Welcome to Bolt") // BOLT
                                                             .size(HeadlineSize::Small),
                                                     )
                                                     .child(

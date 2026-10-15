@@ -34,7 +34,6 @@ cp target/release/bolt "$app/Contents/MacOS/bolt"
 cp target/release/cli "$app/Contents/MacOS/cli"
 # Drop local symbols, as Zed does for its releases (much smaller bundle).
 strip -x "$app/Contents/MacOS/bolt" "$app/Contents/MacOS/cli"
-cp crates/zed/resources/Document.icns "$app/Contents/Resources/Document.icns"
 
 # App icon from the generated PNGs (see script/bolt-generate-icons.swift).
 iconset="$(mktemp -d)/AppIcon.iconset"
@@ -46,6 +45,8 @@ for size in 16 32 128 256 512; do
     sips -z "$double" "$double" "$source_icon" --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
+# Documents opened with Bolt show the Bolt icon in Finder (Zed's Document.icns is Zed-branded).
+cp "$app/Contents/Resources/AppIcon.icns" "$app/Contents/Resources/Document.icns"
 
 python3 - "$app/Contents/Info.plist" "$version" crates/zed/resources/info/*.plist <<'PY'
 import plistlib, re, sys

@@ -2,7 +2,7 @@
 
 ### Project
 Bolt — /Users/administrator/Projects/bolt
-Branch: `main` (all Bolt work goes here) | Remote: `origin` = github.com/NicolaSpadari/bolt (private), `upstream` = zed
+Branch: `bolt` (all Bolt work, GitHub default); `main` = plain Zed (stable tags only) | Remote: `origin` = github.com/NicolaSpadari/bolt (private), `upstream` = zed
 Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime: macOS arm64, Xcode 26.2
 
 ### Session Summary (2026-10-13 → 2026-10-15)
@@ -18,7 +18,9 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - 2026-10-15: SCM round 2 (fetch/pull/push/sync from `bolt_scm`, VS Code action button + status bar sync/publish,
   `--no-track` Create Branch From, merge message prefill, placeholder ellipsis). Verified by the user. Then: terminal
   "+" opens a terminal directly; TypeScript hover expanded one level (`expand_typescript_hovers`); SCM auto-reveal of
-  the active file; debug builds on the `dev` channel (run next to the installed Bolt).
+  the active file; debug builds on the `dev` channel (run next to the installed Bolt). Later: search panel restyle;
+  Cargo features `repl`/`debugger`/`ai`/`collab` (off, 1056 → 959 crates); Vue `<script>` base indent; rebrand pass
+  (`notes/rebrand-map.md`); branch pickers by recency; branch split `bolt`/`main`.
 
 ### Current State
 - All work committed and pushed on `main`. Release bundle rebuilt on 2026-10-14 (`target/release/Bolt.app`); the copy in
@@ -47,9 +49,13 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - `.rules` contains a block injected by the context-mode plugin: never commit it.
 
 ### Next Steps (wait for the user to pick)
-1. Backlog (PROGRESS): search panel UI restyle (Zed-native, UI only), lighter builds via Cargo features
-   (later), `script/bolt-sync` (upstream sync, P0).
-2. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).
+1. If not done yet: the user resets `main` to Zed v1.23.3 (force push, blocked for the agent):
+   `git tag bolt-pre-split-2026-10-15 3cdc9304ef && git push origin bolt-pre-split-2026-10-15 && git branch -f main v1.23.3 && git push --force-with-lease=main:3cdc9304ef origin main`
+2. `script/bolt-sync` for the new branch model (`notes/upstream-sync.md`), then the first real sync to the latest Zed
+   stable tag.
+3. Release build + /Applications update when the user asks (after the features are done).
+4. Optional upstream PRs (user's call): Zed on-type format language fix, zed-extensions/vue `script_element` indent.
+5. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).
 
 ### Useful Context
 - Xcode 26 needs `xcodebuild -downloadComponent MetalToolchain` (done) or `gpui_apple` fails.
