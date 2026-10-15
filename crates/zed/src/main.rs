@@ -690,9 +690,7 @@ fn main() {
         #[cfg(feature = "ai")]
         {
             let copilot_chat_configuration = copilot_chat::CopilotChatConfiguration {
-                enterprise_uri: language::language_settings::all_language_settings(None, cx)
-                    .edit_predictions
-                    .copilot
+                enterprise_uri: settings::CopilotSettings::get_global(cx)
                     .enterprise_uri
                     .clone(),
             };

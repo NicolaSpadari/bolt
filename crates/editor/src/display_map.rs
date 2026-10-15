@@ -3283,7 +3283,7 @@ pub mod tests {
                 LanguageConfig {
                     name: "Test".into(),
                     matcher: (LanguageMatcher {
-                        path_suffixes: vec![".test".to_string()],
+                        path_suffixes: vec![".test".into()],
                         ..Default::default()
                     })
                     .into(),
@@ -3732,7 +3732,7 @@ pub mod tests {
                 LanguageConfig {
                     name: "Test".into(),
                     matcher: (LanguageMatcher {
-                        path_suffixes: vec![".test".to_string()],
+                        path_suffixes: vec![".test".into()],
                         ..Default::default()
                     })
                     .into(),
@@ -3820,7 +3820,7 @@ pub mod tests {
                 LanguageConfig {
                     name: "Test".into(),
                     matcher: (LanguageMatcher {
-                        path_suffixes: vec![".test".to_string()],
+                        path_suffixes: vec![".test".into()],
                         ..Default::default()
                     })
                     .into(),

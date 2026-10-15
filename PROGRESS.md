@@ -257,7 +257,6 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `README.md` | rewritten for Bolt (on sync: keep ours) | user request |
 | `crates/grammars/src/{typescript,javascript,tsx,css}/highlights.scm` | capture suffixes: `operator.arrow` (`=>`), `punctuation.special.template` (`${ }`), `property.css`, `function.css` (fall back to the unsuffixed capture) | VS Code-identical colors |
 | `assets/settings/default.json` (colors) | `semantic_tokens: combined`; `global_lsp_settings.semantic_token_rules` (readonly/constant/defaultLibrary like VS Code); `diff_view_style: unified` | VS Code-identical colors; user preference |
-| `crates/settings_content/src/extension.rs`, `crates/extension_host/src/extension_settings.rs`, `crates/extensions_ui/src/extension_suggestions.rs`, `assets/settings/default.json` | `suggest_extensions` (default false) | no "Emmet is available" popups |
 | `crates/settings_content/src/editor.rs`, `crates/settings/src/vscode_import.rs`, `assets/settings/default.json` | `iconify` setting (default true) | `bolt_iconify` |
 | `crates/editor/src/inlays.rs`, `crates/editor/src/display_map/inlay_map.rs` | `InlayContent::Image` + `Inlay::image` (rendered like color inlays) | Iconify icon before the name on the cursor row |
 | `crates/editor/src/display_map.rs` | `HighlightKey::BoltIconify` | dimmed icon names |
@@ -328,3 +327,12 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-10-15: branch split: `bolt` created from main (`3cdc9304ef`), GitHub default branch = `bolt`; `main` back to Zed
   v1.23.3 pending (force push blocked by the agent permissions: the user runs it). Rebrand pass, branch pickers by
   recency, SCM/search row actions only on hover, title bar fix (`collab_ui::init` also inits it).
+- 2026-10-15: first upstream sync, Zed v1.23.3 → v1.24.2 (146 upstream commits, 490 files), on `sync/v1.24.2` from
+  `bolt` (rollback tag `bolt-pre-v1.24.2`). Auto-merged everything but 8 files / 11 hunks: `Cargo.lock` (took
+  upstream, rebuilt), `crates/zed/Cargo.toml` (version, optional `repl`, bundle ids + new `category`), keymap (kept
+  both blocks), `default.json`, `mac_only_instance.rs` (new upstream port code + Bolt offset), `main.rs` (`ai` gate
+  around the new Copilot setup), `suggest_extensions` (Zed 1.24 added the same setting → Bolt's copy dropped, Bolt
+  default `false` kept in default.json). API drift: `linked_worktree_short_name` / `PathStyle::file_name` in
+  `bolt_project_status.rs` (re-mirrored from `TitleBar::render`). Checks: debug build, all-features check, zed tests
+  build, startup smoke run, BOLT markers (only the 3 suggest_extensions ones gone), no new visible "Zed" strings.
+  About 30 min, most of it build time.
