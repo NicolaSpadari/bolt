@@ -233,6 +233,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/language_tools/{Cargo.toml,src/lsp_log_view.rs}` | feature `ai` (Copilot server in the LSP log) | lighter builds |
 | `crates/extension_host/src/extension_host.rs` | `bolt_patch_vue_indents` after loading extension queries | Vue `<script>` base indent |
 | `crates/editor/src/completions.rs` | on-type formatting only if both the language at the cursor and the buffer language allow it | Vue `<script>` base indent |
+| `crates/settings_content/src/extension.rs`, `crates/extension_host/src/extension_settings.rs`, `crates/extensions_ui/src/extension_suggestions.rs`, `crates/settings_ui/src/page_data.rs` | Zed 1.24's `suggest_extensions` as `Option<bool>` (a plain `bool` defaulting to true let every settings layer without the key overwrite `false`); Bolt default `false` in default.json | no extension suggestions; candidate upstream PR |
 | rebrand (`// BOLT` on each line): `crates/ui/src/components/image.rs` (`BoltLogo`), `crates/workspace/src/{welcome.rs,notifications.rs,workspace.rs}`, `crates/onboarding/src/{onboarding.rs,basics_page.rs}`, `crates/zed/src/zed.rs` (About), `crates/zed/src/zed/{app_menus.rs,move_to_applications.rs,open_listener.rs}`, `crates/settings_ui/src/{settings_ui.rs,page_data.rs,pages/sandbox_settings.rs}`, `crates/extensions_ui/src/{extensions_ui.rs,components/extension_card.rs}`, `crates/language_tools/src/key_context_view.rs`, `crates/auto_update/src/auto_update.rs`, `crates/install_cli/src/install_cli_binary.rs`, `crates/zed/resources/info/{Permissions,DocumentTypes}.plist` | "Zed" → "Bolt" in visible text, Bolt logo, Help menu, `bolt://` alias | rebrand (on sync: re-check new "Zed" strings with `notes/rebrand-map.md`) |
 | `crates/editor/src/editor_tests.rs` | `expand_typescript_hovers: None` in two `GlobalLspSettingsContent` literals | tests compile with the hover setting |
 | `assets/settings/default.json` (Vue) | `Vue.js.use_on_type_format: false` | Vue `<script>` base indent |
@@ -336,3 +337,7 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   `bolt_project_status.rs` (re-mirrored from `TitleBar::render`). Checks: debug build, all-features check, zed tests
   build, startup smoke run, BOLT markers (only the 3 suggest_extensions ones gone), no new visible "Zed" strings.
   About 30 min, most of it build time.
+- 2026-10-15: `suggest_extensions` (Zed's own since 1.24) didn't honour `false` (plain `bool` + `default_true`: every
+  settings layer without the key overwrote it) → made `Option<bool>`; verified with a scratch settings test (true →
+  false with Bolt defaults). 8 `extensions_ui` suggestion tests now fail only because Bolt's default is `false`.
+  Disk full during the build: `target/debug/incremental` was 127 GB → removed (cache only).

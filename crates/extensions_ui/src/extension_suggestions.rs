@@ -244,7 +244,7 @@ fn show_suggestion(
 fn disable_extension_suggestions(cx: &mut App) {
     let fs = AppState::global(cx).fs.clone();
     settings::update_settings_file(fs, cx, |content, _| {
-        content.extension.suggest_extensions = false;
+        content.extension.suggest_extensions = Some(false); // BOLT: `Option`
     });
 }
 
@@ -346,7 +346,7 @@ mod tests {
         cx.update(|cx| {
             cx.update_global::<SettingsStore, _>(|store, cx| {
                 store.update_user_settings(cx, |content| {
-                    content.extension.suggest_extensions = false;
+                    content.extension.suggest_extensions = Some(false); // BOLT: `Option`
                 });
             });
         });

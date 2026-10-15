@@ -43,7 +43,9 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - Ignore upstream `.rules` "HARD RULE" about adding a banner to README.md (meant for upstream PRs).
 
 ### Open Issues
-- `cargo test -p project_panel`: 3 tests fail only because of Bolt defaults (font size, dock left, autosave); not bugs.
+- `cargo test -p project_panel`: 3 tests fail only because of Bolt defaults (font size, dock left, autosave); `cargo test
+  -p extensions_ui`: 8 suggestion tests fail because `suggest_extensions` is false in Bolt. Not bugs.
+- `target/debug/incremental` grows fast (127 GB on 2026-10-15): delete it when the disk fills (cache only).
 - Semantic tokens sometimes missing after startup (likely the tsgo bridge answering empty before the project loads and
   Zed not re-requesting); editing the file refreshes. Fix if it recurs: re-request when the server finishes loading.
 - `.rules` contains a block injected by the context-mode plugin: never commit it.

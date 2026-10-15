@@ -532,9 +532,10 @@ fn general_page(cx: &App) -> SettingsPage {
                 field: Box::new(SettingField {
                     organization_override: None,
                     json_path: Some("suggest_extensions"),
-                    pick: |settings_content| Some(&settings_content.extension.suggest_extensions),
+                    // BOLT: `suggest_extensions` is an `Option`, like the other settings.
+                    pick: |settings_content| settings_content.extension.suggest_extensions.as_ref(),
                     write: |settings_content, value, _| {
-                        settings_content.extension.suggest_extensions = value.unwrap_or(true);
+                        settings_content.extension.suggest_extensions = value;
                     },
                 }),
                 metadata: None,

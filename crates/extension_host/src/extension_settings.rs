@@ -41,7 +41,7 @@ impl Settings for ExtensionSettings {
         Self {
             auto_install_extensions: content.extension.auto_install_extensions.clone(),
             auto_update_extensions: content.extension.auto_update_extensions.clone(),
-            suggest_extensions: content.extension.suggest_extensions,
+            suggest_extensions: content.extension.suggest_extensions.unwrap_or(true), // BOLT: `Option`
             granted_capabilities: content
                 .extension
                 .granted_extension_capabilities
