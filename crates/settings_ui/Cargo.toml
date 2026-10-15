@@ -14,10 +14,12 @@ doctest = false
 
 [features]
 default = []
+# BOLT: the AI settings pages and their crates (stand-ins in `bolt_no_ai.rs` without it).
+ai = ["dep:agent", "dep:codestral", "dep:copilot", "dep:copilot_ui", "dep:edit_prediction", "dep:edit_prediction_ui"]
 test-support = []
 
 [dependencies]
-agent.workspace = true
+agent = { workspace = true, optional = true } # BOLT: feature
 agent_settings.workspace = true
 agent_skills.workspace = true
 anyhow.workspace = true
@@ -25,14 +27,14 @@ audio.workspace = true
 client.workspace = true
 cloud_api_types.workspace = true
 component.workspace = true
-codestral.workspace = true
+codestral = { workspace = true, optional = true } # BOLT: feature
 collections.workspace = true
 context_server.workspace = true
-copilot.workspace = true
-copilot_ui.workspace = true
+copilot = { workspace = true, optional = true } # BOLT: feature
+copilot_ui = { workspace = true, optional = true } # BOLT: feature
 cpal.workspace = true
-edit_prediction.workspace = true
-edit_prediction_ui.workspace = true
+edit_prediction = { workspace = true, optional = true } # BOLT: feature
+edit_prediction_ui = { workspace = true, optional = true } # BOLT: feature
 editor.workspace = true
 extension.workspace = true
 extension_host.workspace = true

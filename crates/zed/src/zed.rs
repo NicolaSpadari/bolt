@@ -1,4 +1,6 @@
 mod app_menus;
+// BOLT: AI only with the `ai` Cargo feature.
+#[cfg(feature = "ai")]
 pub mod edit_prediction_registry;
 #[cfg(target_os = "macos")]
 pub(crate) mod mac_only_instance;
@@ -16,6 +18,7 @@ pub mod visual_tests;
 pub(crate) mod windows_only_instance;
 
 use agent_settings::{UserAgentsMdState, init_user_agents_md};
+#[cfg(feature = "ai")]
 use agent_ui::AgentDiffToolbar;
 use anyhow::Context as _;
 pub use app_menus::*;
@@ -28,7 +31,12 @@ use editor::{Editor, MultiBuffer};
 use extension_host::ExtensionStore;
 use feature_flags::{FeatureFlagAppExt as _, PanicFeatureFlag};
 use fs::Fs;
+#[cfg(feature = "ai")]
 use futures::FutureExt as _;
+#[cfg(feature = "ai")]
+use gpui::AsyncWindowContext;
+#[cfg(feature = "ai")]
+use workspace::Panel;
 use futures::{StreamExt, channel::mpsc, select_biased};
 use git_ui::branch_diff::BranchDiffToolbar;
 use git_ui::commit_view::CommitViewToolbar;
@@ -39,7 +47,7 @@ use git_ui::staged_diff::StagedDiffToolbar;
 use git_ui::unstaged_diff::UnstagedDiffToolbar;
 use git_ui_core::file_diff_view::FileDiffStyleToolbar;
 use gpui::{
-    Action, App, AppContext as _, AsyncWindowContext, ClipboardItem, Context, DismissEvent,
+    Action, App, AppContext as _, ClipboardItem, Context, DismissEvent,
     Element, Entity, FocusHandle, Focusable, Image, ImageFormat, KeyBinding, ParentElement,
     PathPromptOptions, PromptLevel, ReadGlobal, SharedString, Size, Task, TaskExt, TitlebarOptions,
     UpdateGlobal, WeakEntity, Window, WindowBounds, WindowHandle, WindowKind, WindowOptions,
@@ -76,6 +84,7 @@ use settings::{
     SettingsFile, SettingsStore, VIM_KEYMAP_PATH, initial_local_debug_tasks_content,
     initial_project_settings_content, initial_tasks_content, update_settings_file,
 };
+#[cfg(feature = "ai")]
 use sidebar::Sidebar;
 #[cfg(debug_assertions)]
 use workspace::workspace_error::{ErrorAction, ErrorSeverity, WorkspaceError};
@@ -98,7 +107,7 @@ use vim_mode_setting::VimModeSetting;
 use workspace::notifications::{NotificationId, dismiss_app_notification, show_app_notification};
 
 use workspace::{
-    AppState, MultiWorkspace, NewFile, NewWindow, OpenLog, Panel, Toast, Workspace,
+    AppState, MultiWorkspace, NewFile, NewWindow, OpenLog, Toast, Workspace,
     WorkspaceSettings, create_and_open_local_file,
     notifications::simple_message_notification::MessageNotification, open_new,
 };
@@ -500,6 +509,9 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
                 .unwrap_or(true)
         });
 
+        // BOLT: agent panel and threads sidebar only with the `ai` Cargo feature.
+        #[cfg(feature = "ai")]
+        {
         let window_handle = window.window_handle();
         let multi_workspace_handle = cx.entity();
         cx.subscribe_in(
@@ -545,6 +557,7 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
                 })
                 .ok();
         });
+        }
     })
     .detach();
 
@@ -583,7 +596,9 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             }
         }
 
+        #[cfg(feature = "ai")]
         let edit_prediction_menu_handle = PopoverMenuHandle::default();
+        #[cfg(feature = "ai")]
         let edit_prediction_ui = cx.new(|cx| {
             edit_prediction_ui::EditPredictionButton::new(
                 app_state.fs.clone(),
@@ -593,6 +608,7 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
                 cx,
             )
         });
+        #[cfg(feature = "ai")]
         workspace.register_action({
             move |_, _: &edit_prediction_ui::ToggleMenu, window, cx| {
                 edit_prediction_menu_handle.toggle(window, cx);
@@ -639,6 +655,7 @@ pub fn initialize_workspace(app_state: Arc<AppState>, cx: &mut App) {
             status_bar.add_left_item(git_blame_status, window, cx);
             status_bar.add_left_item(merge_conflict_indicator, window, cx);
             status_bar.add_left_item(activity_indicator, window, cx);
+            #[cfg(feature = "ai")]
             status_bar.add_right_item(edit_prediction_ui, window, cx);
             status_bar.add_right_item(active_buffer_encoding, window, cx);
             status_bar.add_right_item(active_buffer_language, window, cx);
@@ -800,6 +817,12 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
             }
         }
 
+        // BOLT: agent panel only with the `ai` Cargo feature.
+        #[cfg(feature = "ai")]
+        let agent_panel =
+            initialize_agent_panel(workspace_handle.clone(), cx.clone()).map(|r| r.log_err());
+        #[cfg(not(feature = "ai"))]
+        let agent_panel = futures::future::ready(());
         futures::join!(
             add_panel_when_ready(project_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(outline_panel, workspace_handle.clone(), cx.clone()),
@@ -807,7 +830,7 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
             add_panel_when_ready(git_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(search_panel, workspace_handle.clone(), cx.clone()),
             add_panel_when_ready(scm_panel, workspace_handle.clone(), cx.clone()),
-            initialize_agent_panel(workspace_handle.clone(), cx.clone()).map(|r| r.log_err()),
+            agent_panel,
         );
 
         workspace_handle.update(cx, |workspace, cx| {
@@ -818,6 +841,7 @@ fn initialize_panels(window: &mut Window, cx: &mut Context<Workspace>) -> Task<a
     })
 }
 
+#[cfg(feature = "ai")]
 fn setup_or_teardown_ai_panel<P: Panel>(
     workspace: &mut Workspace,
     window: &mut Window,
@@ -854,6 +878,7 @@ fn setup_or_teardown_ai_panel<P: Panel>(
     }
 }
 
+#[cfg(feature = "ai")]
 fn ensure_agent_panel_for_workspace(
     workspace: &mut Workspace,
     source_workspace: Option<WeakEntity<Workspace>>,
@@ -878,6 +903,7 @@ fn ensure_agent_panel_for_workspace(
     })
 }
 
+#[cfg(feature = "ai")]
 async fn initialize_agent_panel(
     workspace_handle: WeakEntity<Workspace>,
     mut cx: AsyncWindowContext,
@@ -918,6 +944,16 @@ fn register_actions(
     _: &mut Window,
     cx: &mut Context<Workspace>,
 ) {
+    // BOLT: collaboration only with the `collab` Cargo feature.
+    #[cfg(feature = "collab")]
+    workspace.register_action(
+        |workspace: &mut Workspace,
+         _: &collab_ui::collab_panel::ToggleFocus,
+         window: &mut Window,
+         cx: &mut Context<Workspace>| {
+            workspace.toggle_panel_focus::<collab_ui::collab_panel::CollabPanel>(window, cx);
+        },
+    );
     workspace
         .register_action(|_, _: &OpenDocs, _, cx| cx.open_url(DOCS_URL))
         .register_action(|_, _: &OpenStatusPage, _, cx| cx.open_url(STATUS_URL))
@@ -1318,14 +1354,6 @@ fn register_actions(
         )
         .register_action(
             |workspace: &mut Workspace,
-             _: &collab_ui::collab_panel::ToggleFocus,
-             window: &mut Window,
-             cx: &mut Context<Workspace>| {
-                workspace.toggle_panel_focus::<collab_ui::collab_panel::CollabPanel>(window, cx);
-            },
-        )
-        .register_action(
-            |workspace: &mut Workspace,
              _: &terminal_panel::ToggleFocus,
              window: &mut Window,
              cx: &mut Context<Workspace>| {
@@ -1413,6 +1441,7 @@ fn register_actions(
         });
     }
 
+    #[cfg(feature = "ai")]
     workspace.register_action(sidebar::dump_workspace_info);
 
     #[cfg(debug_assertions)]
@@ -1495,8 +1524,11 @@ fn initialize_pane(
                 let dap_log_item = cx.new(|_| debugger_tools::DapLogToolbarItemView::new());
                 toolbar.add_item(dap_log_item, window, cx);
             }
-            let acp_tools_item = cx.new(|_| acp_tools::AcpToolsToolbarItemView::new());
-            toolbar.add_item(acp_tools_item, window, cx);
+            #[cfg(feature = "ai")]
+            {
+                let acp_tools_item = cx.new(|_| acp_tools::AcpToolsToolbarItemView::new());
+                toolbar.add_item(acp_tools_item, window, cx);
+            }
             let telemetry_log_item =
                 cx.new(|cx| telemetry_log::TelemetryLogToolbarItemView::new(window, cx));
             toolbar.add_item(telemetry_log_item, window, cx);
@@ -1520,8 +1552,11 @@ fn initialize_pane(
             toolbar.add_item(solo_diff_git_toolbar, window, cx);
             let commit_view_toolbar = cx.new(|_| CommitViewToolbar::new());
             toolbar.add_item(commit_view_toolbar, window, cx);
-            let agent_diff_toolbar = cx.new(AgentDiffToolbar::new);
-            toolbar.add_item(agent_diff_toolbar, window, cx);
+            #[cfg(feature = "ai")]
+            {
+                let agent_diff_toolbar = cx.new(AgentDiffToolbar::new);
+                toolbar.add_item(agent_diff_toolbar, window, cx);
+            }
             let basedpyright_banner = cx.new(|cx| BasedPyrightBanner::new(workspace, cx));
             toolbar.add_item(basedpyright_banner, window, cx);
             let image_view_toolbar = cx.new(|_| image_viewer::ImageViewToolbarControls::new());

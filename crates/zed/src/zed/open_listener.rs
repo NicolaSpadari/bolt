@@ -1,6 +1,19 @@
 use crate::handle_open_request;
 use crate::restore_or_create_workspace;
+#[cfg(any(feature = "ai", test))]
 use agent_ui::ExternalSourcePrompt;
+
+// BOLT: without the `ai` feature `zed://agent` links are parsed and then ignored (no agent panel).
+#[cfg(not(any(feature = "ai", test)))]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternalSourcePrompt(String);
+
+#[cfg(not(any(feature = "ai", test)))]
+impl ExternalSourcePrompt {
+    pub fn new(prompt: &str) -> Option<Self> {
+        Some(Self(prompt.to_string()))
+    }
+}
 use anyhow::{Context as _, Result, anyhow};
 use cli::{CliRequest, CliResponse, CliResponseSink};
 use cli::{IpcHandshake, ipc};

@@ -1,3 +1,6 @@
+// BOLT: stand-ins for the AI pages without the `ai` feature.
+#[cfg(not(feature = "ai"))]
+mod bolt_no_ai;
 mod components;
 mod page_data;
 pub mod pages;
@@ -3685,6 +3688,8 @@ impl SettingsWindow {
         self.render_sub_page_items_in(page_content, items, false, window, cx)
     }
 
+    // BOLT: only the AI pages use it (`ai` feature).
+    #[cfg_attr(not(feature = "ai"), allow(dead_code))]
     fn render_sub_page_items_section<'a, Items>(
         &self,
         items: Items,

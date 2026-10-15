@@ -15,11 +15,14 @@ const _: () = assert!(
      Forks: update APP_NAME in crates/paths/src/paths.rs when renaming the binary.",
 );
 
+// BOLT: AI and collaboration only with their Cargo features.
+#[cfg(feature = "ai")]
 use agent_ui::AgentPanel;
 use anyhow::{Context as _, Result};
 use clap::Parser;
 use cli::FORCE_CLI_MODE_ENV_VAR_NAME;
 use client::{Client, ProxySettings, RefreshLlmTokenListener, UserStore, parse_zed_link};
+#[cfg(feature = "collab")]
 use collab_ui::channel_view::ChannelView;
 use collections::HashMap;
 use crashes::InitCrashHandler;
@@ -27,7 +30,7 @@ use db::kvp::{GlobalKeyValueStore, KeyValueStore};
 use editor::Editor;
 use extension::ExtensionHostProxy;
 use fs::{Fs, RealFs};
-use futures::{FutureExt, StreamExt, channel::oneshot, future};
+use futures::{FutureExt, StreamExt, channel::oneshot};
 use git::GitHostingProviderRegistry;
 use git_ui::clone::clone_and_open;
 use gpui::{
@@ -39,6 +42,7 @@ use gpui_tokio::Tokio;
 use language::LanguageRegistry;
 use onboarding::{FIRST_OPEN, show_onboarding_view};
 use project_panel::ProjectPanel;
+#[cfg(feature = "ai")]
 use prompt_store::PromptBuilder;
 use remote::RemoteConnectionOptions;
 use reqwest_client::ReqwestClient;
@@ -69,13 +73,15 @@ use uuid::Uuid;
 use workspace::{
     AppState, MultiWorkspace, SerializedWorkspaceLocation, SessionWorkspace, Toast,
     WorkspaceSettings, WorkspaceStore,
-    notifications::{NotificationId, NotifyResultExt},
+    notifications::NotificationId,
     restore_multiworkspace,
 };
+#[cfg(feature = "ai")]
+use zed::edit_prediction_registry;
 use zed::{
     OpenListener, OpenRequest, RawOpenRequest, app_menus, build_window_options,
-    derive_paths_with_position, edit_prediction_registry, handle_cli_connection,
-    handle_keymap_file_changes, initialize_workspace, open_paths_with_positions,
+    derive_paths_with_position, handle_cli_connection, handle_keymap_file_changes,
+    initialize_workspace, open_paths_with_positions,
 };
 
 use crate::zed::{CrashHandler, OpenRequestKind, eager_load_active_theme_and_icon_theme};
@@ -627,6 +633,7 @@ fn main() {
         })
         .detach();
 
+        #[cfg(feature = "ai")]
         let is_new_install = matches!(&installation_id, Some(IdType::New(_)));
 
         // We should rename these in the future to `first app open`, `first app open for release channel`, and `app open`
@@ -680,51 +687,63 @@ fn main() {
             cx.background_executor().clone(),
         );
         command_palette::init(cx);
-        let copilot_chat_configuration = copilot_chat::CopilotChatConfiguration {
-            enterprise_uri: language::language_settings::all_language_settings(None, cx)
-                .edit_predictions
-                .copilot
-                .enterprise_uri
-                .clone(),
-        };
-        let credentials_provider = zed_credentials_provider::global(cx);
-        copilot_chat::init(
-            app_state.client.http_client(),
-            credentials_provider,
-            copilot_chat_configuration,
-            cx,
-        );
-
-        copilot_ui::init(&app_state, cx);
+        #[cfg(feature = "ai")]
+        {
+            let copilot_chat_configuration = copilot_chat::CopilotChatConfiguration {
+                enterprise_uri: language::language_settings::all_language_settings(None, cx)
+                    .edit_predictions
+                    .copilot
+                    .enterprise_uri
+                    .clone(),
+            };
+            let credentials_provider = zed_credentials_provider::global(cx);
+            copilot_chat::init(
+                app_state.client.http_client(),
+                credentials_provider,
+                copilot_chat_configuration,
+                cx,
+            );
+            copilot_ui::init(&app_state, cx);
+        }
         language_model::init(cx);
         RefreshLlmTokenListener::register(
             app_state.client.clone(),
             app_state.user_store.clone(),
             cx,
         );
-        language_models::init(app_state.user_store.clone(), app_state.client.clone(), cx);
-        acp_tools::init(cx);
+        #[cfg(feature = "ai")]
+        {
+            language_models::init(app_state.user_store.clone(), app_state.client.clone(), cx);
+            acp_tools::init(cx);
+        }
         zed::telemetry_log::init(cx);
         zed::remote_debug::init(cx);
-        edit_prediction_ui::init(cx);
-        web_search::init(cx);
-        web_search_providers::init(app_state.client.clone(), app_state.user_store.clone(), cx);
+        #[cfg(feature = "ai")]
+        {
+            edit_prediction_ui::init(cx);
+            web_search::init(cx);
+            web_search_providers::init(app_state.client.clone(), app_state.user_store.clone(), cx);
+        }
         snippet_provider::init(cx);
+        #[cfg(feature = "ai")]
         edit_prediction_registry::init(app_state.client.clone(), app_state.user_store.clone(), cx);
-        let prompt_builder = PromptBuilder::load(app_state.fs.clone(), stdout_is_a_pty(), cx);
         project::AgentRegistryStore::init_global(
             cx,
             app_state.fs.clone(),
             app_state.client.http_client(),
         );
-        agent_ui::init(
-            app_state.fs.clone(),
-            prompt_builder,
-            app_state.languages.clone(),
-            is_new_install,
-            false,
-            cx,
-        );
+        #[cfg(feature = "ai")]
+        {
+            let prompt_builder = PromptBuilder::load(app_state.fs.clone(), stdout_is_a_pty(), cx);
+            agent_ui::init(
+                app_state.fs.clone(),
+                prompt_builder,
+                app_state.languages.clone(),
+                is_new_install,
+                false,
+                cx,
+            );
+        }
         zed::watch_user_agents_md(app_state.fs.clone(), cx);
 
         #[cfg(feature = "repl")]
@@ -786,6 +805,7 @@ fn main() {
         language_tools::init(cx);
         call::init(app_state.client.clone(), app_state.user_store.clone(), cx);
         notifications::init(app_state.client.clone(), app_state.user_store.clone(), cx);
+        #[cfg(feature = "collab")]
         collab_ui::init(&app_state, cx);
         git_ui::init(cx);
         feedback::init(cx);
@@ -796,6 +816,7 @@ fn main() {
         settings_ui::init(cx);
         keymap_editor::init(cx);
         extensions_ui::init(cx);
+        #[cfg(feature = "ai")]
         edit_prediction::init(cx);
         inspector_ui::init(app_state.clone(), cx);
         json_schema_store::init(cx);
@@ -1069,6 +1090,14 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
                         task.await.log_err();
                     }
 
+                    // BOLT: without the `ai` feature there is no agent panel to open.
+                    #[cfg(not(feature = "ai"))]
+                    {
+                        let _ = (multi_workspace, external_source_prompt);
+                        log::warn!("zed://agent received, but Bolt is built without the `ai` feature");
+                        anyhow::Ok(())
+                    }
+                    #[cfg(feature = "ai")]
                     multi_workspace.update(cx, |multi_workspace, window, cx| {
                         multi_workspace.workspace().update(cx, |workspace, cx| {
                             if let Some(panel) = workspace.focus_panel::<AgentPanel>(window, cx) {
@@ -1347,26 +1376,39 @@ fn handle_open_request(request: OpenRequest, app_state: Arc<AppState>, cx: &mut 
                     .await?;
                 }
 
+                #[cfg_attr(not(feature = "collab"), allow(unused_variables))]
                 let workspace_window =
                     workspace::get_any_active_multi_workspace(app_state, cx.clone()).await?;
 
-                let workspace = workspace_window.read_with(cx, |mw, _| mw.workspace().clone())?;
-                let weak_workspace = workspace.downgrade();
+                // BOLT: channel notes need collaboration (`collab` feature).
+                #[cfg(feature = "collab")]
+                {
+                    use futures::future;
+                    use workspace::notifications::NotifyResultExt as _;
 
-                let mut promises = Vec::new();
-                for (channel_id, heading) in request.open_channel_notes {
-                    promises.push(cx.update_window(workspace_window.into(), |_, window, cx| {
-                        ChannelView::open(
-                            client::ChannelId(channel_id),
-                            heading,
-                            workspace.clone(),
-                            window,
-                            cx,
-                        )
-                    })?)
+                    let workspace =
+                        workspace_window.read_with(cx, |mw, _| mw.workspace().clone())?;
+                    let weak_workspace = workspace.downgrade();
+
+                    let mut promises = Vec::new();
+                    for (channel_id, heading) in request.open_channel_notes {
+                        promises.push(cx.update_window(workspace_window.into(), |_, window, cx| {
+                            ChannelView::open(
+                                client::ChannelId(channel_id),
+                                heading,
+                                workspace.clone(),
+                                window,
+                                cx,
+                            )
+                        })?)
+                    }
+                    for result in future::join_all(promises).await {
+                        result.notify_workspace_async_err(weak_workspace.clone(), cx);
+                    }
                 }
-                for result in future::join_all(promises).await {
-                    result.notify_workspace_async_err(weak_workspace.clone(), cx);
+                #[cfg(not(feature = "collab"))]
+                if !request.open_channel_notes.is_empty() {
+                    log::warn!("channel notes need the `collab` feature");
                 }
                 anyhow::Ok(())
             })

@@ -159,6 +159,12 @@ file is upstream's hottest (46 commits / 3 months).
   - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
     the panel as a truncated `Label` (ellipsis).
 - ✅ Terminal panel "+" opens a new terminal directly (no New Terminal / Spawn Task menu) (user request 2026-10-15).
+- 🧪 Vue `<script>` indentation (user request 2026-10-15, ESLint `vue/script-indent` `baseIndent: 1`), root causes
+  measured with a scratch test on the real Vue extension + injected TypeScript: (1) vue-language-server's on-type
+  formatting (`;`, `}`, newline) reindents `<script>` without its base indent (`vue.format.script.initialIndent`
+  false) → Bolt default `use_on_type_format: false` for Vue.js, like VS Code's `formatOnType` off; (2) the Vue
+  extension's indents query has no `script_element` rule → first line after `<script>` at column 0; Bolt appends the
+  rule when loading the extension (`bolt_patch_vue_indents`). Candidate upstream PR for zed-extensions/vue.
 - ✅ SCM auto-reveal (user request 2026-10-15): switching tab selects and reveals the active file in the panel, like
   VS Code's `scm.autoReveal` (`scmViewPane.ts` `onDidActiveEditorChange`: groups searched from the last one, selection
   kept when already selected or not listed); the selection also survives panel refreshes.
@@ -171,18 +177,13 @@ file is upstream's hottest (46 commits / 3 months).
 - ✅ Search panel UI: restyle `bolt_search_panel` with Zed's native components and sizing, like the SCM panel
   (toolbar at tab height, Zed list rows, outlined buttons, Zed inputs). UI only: the logic stays as is (user request
   2026-10-14).
-- 🚧 Lighter builds, step 1 done (2026-10-15): `zed` features `repl` (`repl`) and `debugger` (`dap_adapters`,
-  `debug_adapter_extension`, `debugger_tools`, `debugger_ui`), off by default; wiring behind `#[cfg(feature)]` in
-  `main.rs`, `zed.rs`, `quick_action_bar.rs`; built-in keymaps loaded tolerating unknown actions. 1102 → 1080 crates
-  (debug and release). Gotcha: verify startup with stderr captured (a keymap panic is not in Bolt.log). Next: `ai`,
-  then `calls`.
-- ⏳ Lighter builds (later, user request 2026-10-14): exclude switched-off subsystems from the build with Cargo
-  features on the `zed` crate only (`repl`, `debugger` first — attached only to `zed`; then `ai`: `agent_ui`, `agent`,
-  `language_models`, `copilot`, edit prediction; then `calls`: `call`/LiveKit, also used by `title_bar`,
-  `collab_ui`). Keep `language_model` (used everywhere). Measured 2026-10-14: these subsystems own ~104 of 1056
-  crates (AI 71 incl. the AWS SDK; calls 13; REPL 11; debugger 6; remote 2) → expect -10/20% on clean builds, no
-  change on incremental ones. Pair with `script/bolt-sync`: on each Zed update, `cargo tree -i` audit listing new
-  crates that depend on an excluded subsystem and new deps of `zed`, so only what Bolt uses gets aligned.
+- 🧪 Lighter builds (2026-10-15): `zed` Cargo features, all off by default: `repl`, `debugger` (`dap_adapters`,
+  `debug_adapter_extension`, `debugger_tools`, `debugger_ui`), `ai` (agent, agent_ui, acp_*, language_models,
+  copilot*, edit_prediction*, codestral, web_search*, sidebar; enables `settings_ui/ai` and `language_tools/ai`),
+  `collab` (`collab_ui`). 1056 → 959 crates (debug and release). `call` / `channel` stay (−2 crates, 4 more upstream
+  crates to touch). Built-in keymaps skip bindings to actions not in the build. Check with all features on:
+  `cargo check -p zed --features ai,collab,repl,debugger`. Gotcha: verify startup with stderr captured (a keymap panic
+  is not in Bolt.log).
 - Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
@@ -209,6 +210,11 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/release_channel/src/lib.rs` | `display_name` Bolt…, `app_id` `com.spadari.bolt…` | identity |
 | `crates/release_channel/src/lib.rs` (dev) | debug builds default to the `dev` channel (`ZED_RELEASE_CHANNEL` still overrides) | debug build runs next to the installed Bolt (own instance port + DB) |
 | `crates/zed/Cargo.toml`, `crates/zed/src/main.rs`, `crates/zed/src/zed.rs`, `crates/zed/src/zed/quick_action_bar.rs` | features `repl` / `debugger` (optional deps, `#[cfg(feature)]` on their init, DAP log toolbar item, REPL menu); `debugger_ui` also a dev-dependency for the tests; `load_default_keymap` uses `bolt_load_keymap_asset` (`load_asset_allow_partial_failure`: bindings to actions left out of the build are skipped instead of panicking) | lighter builds |
+| `crates/zed/Cargo.toml`, `crates/zed/src/{main.rs,zed.rs}`, `crates/zed/src/zed/open_listener.rs` (ai/collab) | features `ai` / `collab`: optional deps, `#[cfg(feature)]` on inits, agent panel + threads sidebar, edit prediction button, ACP/agent-diff toolbars, collab panel action, channel notes, `zed://agent` (stand-in `ExternalSourcePrompt`) | lighter builds |
+| `crates/settings_ui/{Cargo.toml,src/settings_ui.rs,src/pages.rs,src/components.rs,src/components/section_items.rs}` | feature `ai`; AI pages / Ollama picker replaced by stand-ins in `bolt_no_ai.rs` (new file) without it; 2 `allow(dead_code)` | lighter builds |
+| `crates/language_tools/{Cargo.toml,src/lsp_log_view.rs}` | feature `ai` (Copilot server in the LSP log) | lighter builds |
+| `crates/extension_host/src/extension_host.rs` | `bolt_patch_vue_indents` after loading extension queries | Vue `<script>` base indent |
+| `assets/settings/default.json` (Vue) | `Vue.js.use_on_type_format: false` | Vue `<script>` base indent |
 | `crates/zed/src/zed/mac_only_instance.rs` | `BOLT_INSTANCE_PORT_OFFSET = 3000` | no single-instance clash with Zed (Bolt stable uid 501 = 47438) |
 | `crates/zed/Cargo.toml` (rebrand) | `[[bin]] name = "bolt"`, `default-run`, bundle-dev/stable identifier/name, URL scheme `bolt` | binary must match `APP_NAME` (upstream guard in main.rs) |
 | `crates/zed/src/zed/app_menus.rs` (rebrand) | "Bolt" app menu, About/Hide/Quit Bolt | labels |

@@ -17,6 +17,8 @@ impl SettingsSectionHeader {
         }
     }
 
+    // BOLT: only the AI pages use it (`ai` feature).
+    #[cfg_attr(not(feature = "ai"), allow(dead_code))]
     pub fn icon(mut self, icon: IconName) -> Self {
         self.icon = Some(icon);
         self
