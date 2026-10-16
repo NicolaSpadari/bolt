@@ -24,7 +24,7 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 
 ### Current State
 - All work committed and pushed on `bolt`. Release bundle rebuilt and installed in /Applications on 2026-10-16
-  (commit c53c2565a0); the copy in /Applications is replaced only when the user asks (quit Bolt first).
+  (commit a96aca49f0: SCM pickers confirm the first match, SCM progress bar); the copy in /Applications is replaced only when the user asks (quit Bolt first).
 - Dev: `cargo build` → `./target/debug/bolt <path>` (dev channel: runs next to /Applications/Bolt.app, own DB) (incremental 10 s–2 min; touching `editor`/`project`/`settings_content`
   rebuilds most of the tree). The user prefers debug builds for checks.
 - User test project: `~/Smartness/smartness-pms-webapp` ("PMS v4"). Its `typescript` is `typescript-native-bridge`
