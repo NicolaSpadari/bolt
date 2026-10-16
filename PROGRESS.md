@@ -237,21 +237,24 @@ file is upstream's hottest (46 commits / 3 months).
   pushed (and showed only the push toast). Now: after the pull, `git rev-list --count @{upstream}..HEAD` (unknown →
   push, like VS Code); no push → the pull toast. Footer tooltip = VS Code's `syncTooltip` ("Pull n commits from
   origin/x", "Push m commits to …", "Pull n and push m commits between …"). Built, waiting for the user's check.
-- 🚧 SCM commit input wraps and grows like VS Code (`scmInput.ts` `getContentHeight`: word wrap on, height clamped to
+- ✅ SCM commit input wraps and grows like VS Code (`scmInput.ts` `getContentHeight`: word wrap on, height clamped to
   `scm.inputMinLineCount` 1 … `scm.inputMaxLineCount` 10 lines, then scrolls): `EditorMode::AutoHeight { 1, 10 }`,
   soft wrap from the "Git Commit" language (`editor_width`). Enter = new line, ⌘⏎ = commit (VS Code `scm.acceptInput`).
   Look reused from Zed's git panel (user request): its `commit_message_editor` (no autoclose, Cut / Copy / Paste menu)
   and `git_commit_editor_style` (buffer font, `git_commit_buffer_font_size`); the placeholder uses the same font.
-  Built, waiting for the user's check (user request 2026-10-15).
+  Bug in the 2026-10-15 release (user): input huge, no placeholder, typed text invisible. Cause: the AutoHeight
+  `EditorElement` was a direct flex-row item, measured at min-content width → wrapped every character up to 10 lines.
+  Fix: wrapped in a `w_full` div, container no longer flex. Verified by the user (debug build).
 - ✅ Branch pickers show `n↓ m↑` against each branch's upstream (user request 2026-10-15), from VS Code's
   `BranchItem.description` (`commands.ts`: `behind↓ ahead↑`, then the date; used by checkout, merge, delete). Unlike
   VS Code, zero counts are hidden (user: less clutter), nothing shown when in sync. Zed's branch switcher: next to the name (upstream touch); Bolt's Merge / Create From / Delete pickers:
   between name and date. Data from Zed's `for-each-ref %(upstream:track)` (fresh after a fetch). Verified by the user.
-- ⏳ Empty editor area (project open, no tab): Zed's welcome page as is (Bolt logo, Get Started / Recent Projects,
+- ✅ Empty editor area (project open, no tab): Zed's welcome page as is (Bolt logo, Get Started / Recent Projects,
   same actions), like the screen of a new empty window; before it was blank (user request 2026-10-15, like VS Code /
   Cursor's empty state). Not working yet (user, release 2026-10-15): start with tabs open, close them → still blank. Likely cause to check:
   only the pane created in `Workspace::new` gets `set_should_display_welcome_page(true)`; the center panes restored
-  from the DB (workspace persistence) are new `Pane`s without it. Later (user).
+  from the DB (workspace persistence) are new `Pane`s without it. Confirmed: restored panes come from
+  `Workspace::add_pane`, which now sets the flag too (also for splits). Verified by the user (debug build).
 - Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
@@ -272,6 +275,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/recent_projects/src/recent_projects.rs` | "Open Remote Folder" button/menu hidden, `BOLT_SUGGEST_DEV_CONTAINERS = false` | remote dev |
 | `crates/workspace/src/dock.rs` | `PanelButtons::vertical()` (column, Medium icons, Large buttons, menu to the right) | activity bar |
 | `crates/workspace/src/pane.rs` (welcome) | welcome page also shown with worktrees (`should_display_welcome_page` only) | empty editor area like VS Code |
+| `crates/workspace/src/workspace.rs` (welcome) | `add_pane` sets `set_should_display_welcome_page(true)` | welcome page in restored / split empty panes |
 | `crates/workspace/src/workspace.rs` | `activity_bar` field, `render_activity_bar` before the left dock (4 layouts), left dock buttons out of status bar, drag resize minus `BOLT_ACTIVITY_BAR_WIDTH` | VS Code-style activity bar |
 | `crates/title_bar/src/title_bar.rs` | `mod bolt_project_status`, status item registration in `init`, project items hidden in title bar | project name + branch in status bar |
 | `crates/workspace/src/dock.rs` (width) | left dock: `should_resize_all_panels` always true; on panel switch the new panel takes the current width | one shared, resizable sidebar width |

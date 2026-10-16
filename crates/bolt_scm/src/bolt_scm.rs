@@ -1525,8 +1525,6 @@ impl ScmPanel {
                     .min_h(px(26.))
                     .px_1p5()
                     .py_1()
-                    .flex()
-                    .items_center()
                     .rounded_sm()
                     .border_1()
                     .border_color(if focused {
@@ -1537,11 +1535,13 @@ impl ScmPanel {
                     .relative()
                     .bg(colors.editor_background)
                     .overflow_hidden()
-                    .children(
-                        self.commit_editor
-                            .as_ref()
-                            .map(|editor| EditorElement::new(editor, commit_input_style(cx))),
-                    )
+                    // An AutoHeight editor measures itself from the available width: as a flex item it got the
+                    // min-content width, wrapped every character and grew to max_lines with nothing visible.
+                    .children(self.commit_editor.as_ref().map(|editor| {
+                        div()
+                            .w_full()
+                            .child(EditorElement::new(editor, commit_input_style(cx)))
+                    }))
                     // Drawn here rather than with the editor's placeholder, which is clipped instead of truncated.
                     .when(message_empty, |this| {
                         this.child(

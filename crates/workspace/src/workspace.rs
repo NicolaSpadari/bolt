@@ -4917,6 +4917,8 @@ impl Workspace {
                 cx,
             );
             pane.set_can_split(Some(Arc::new(|_, _, _, _| true)));
+            // BOLT: center panes restored from the DB (and splits) show the welcome page when empty too.
+            pane.set_should_display_welcome_page(true);
             pane
         });
         cx.subscribe_in(&pane, window, Self::handle_pane_event)
