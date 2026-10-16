@@ -55,6 +55,11 @@ impl GitJobDebugQueue {
         }
     }
 
+    // BOLT: the SCM panel shows VS Code's progress bar while git operations run.
+    pub fn running(&self) -> impl Iterator<Item = &RunningJob> {
+        self.running.iter()
+    }
+
     pub fn add(&mut self, id: JobId, description: &'static str, key: Option<SharedString>) {
         self.pending.push_back(PendingJob {
             id,

@@ -113,6 +113,12 @@ impl PickerDelegate for MergePickerDelegate {
         self.selected_index = ix;
     }
 
+    // Filtering moves rows under a still mouse; selecting on hover would make Enter pick that
+    // row instead of the first match (VS Code's quick pick only highlights on hover).
+    fn select_on_hover(&self) -> bool {
+        false
+    }
+
     fn placeholder_text(&self, _: &mut Window, _: &mut App) -> Arc<str> {
         match (self.mode, &self.current) {
             (Mode::CreateFrom, _) => "Select a ref to create the branch from".into(),

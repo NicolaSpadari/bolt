@@ -335,6 +335,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/terminal_view/src/terminal_panel.rs` | "+" in the terminal tab bar = `IconButton` dispatching `workspace::NewTerminal` (was a New Terminal / Spawn Task popover); same buttons applied to restored panes (`persistence.rs`) and MovePane splits: before, only agent_ui's `set_assistant_enabled` did it, absent without `ai` | user request |
 | `crates/project/src/lsp_command.rs`, `crates/project/src/project.rs` | `GetHover::response_from_lsp` calls `bolt_typescript_hover::expand`; `mod bolt_typescript_hover` | TypeScript hover expanded |
 | `crates/settings_content/src/project.rs`, `crates/project/src/project_settings.rs`, `assets/settings/default.json` | `global_lsp_settings.expand_typescript_hovers` (default true) | TypeScript hover toggle |
+| `crates/project/src/git_store/job_debug_queue.rs` | `GitJobDebugQueue::running()` | SCM progress bar (VS Code `ProgressManager`) |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -399,3 +400,7 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   settings layer without the key overwrote it) → made `Option<bool>`; verified with a scratch settings test (true →
   false with Bolt defaults). 8 `extensions_ui` suggestion tests now fail only because Bolt's default is `false`.
   Disk full during the build: `target/debug/incremental` was 127 GB → removed (cache only).
+- 2026-10-16: ✅ SCM pickers (merge / create from / stash): Enter confirmed the row under a still mouse after
+  filtering (Zed `Picker::select_on_hover` default true: filtered rows re-enter under the cursor) → `select_on_hover`
+  false, like VS Code's quick pick (hover only highlights). SCM progress bar like VS Code (`ProgressManager` +
+  `showProgress` in `operation.ts`; infinite 2px bar, hidden 300 ms after the last running job). Verified by the user.

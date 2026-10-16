@@ -9,7 +9,7 @@
 mod merge_picker;
 mod stash_picker;
 
-use std::{ops::Range, path::Path, sync::Arc};
+use std::{ops::Range, path::Path, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use askpass::AskPassDelegate;
@@ -29,9 +29,9 @@ use git_ui::{
 };
 use git_ui_core::{askpass_modal::AskPassModal, notifications::show_error_toast};
 use gpui::{
-    Action, AnyElement, App, AsyncWindowContext, ClickEvent, Context, Entity, EventEmitter,
-    FocusHandle, Focusable, KeyContext, Pixels, PromptLevel, Render, SharedString, Subscription,
-    Task, UniformListScrollHandle, WeakEntity, Window, actions, px, uniform_list,
+    Action, AnimationExt as _, AnyElement, App, AsyncWindowContext, ClickEvent, Context, Entity,
+    EventEmitter, FocusHandle, Focusable, KeyContext, Pixels, PromptLevel, Render, SharedString,
+    Subscription, Task, UniformListScrollHandle, WeakEntity, Window, actions, px, uniform_list,
 };
 use notifications::status_toast::StatusToast;
 use project::{
@@ -57,6 +57,37 @@ use workspace::{
 };
 
 const SCM_PANEL_KEY: &str = "BoltScmPanel";
+/// Zed's git job descriptions matching the VS Code operations with `showProgress: true` (`operation.ts`): status
+/// refreshes and writes, but not reads such as diffs, blame or `show`.
+const PROGRESS_JOBS: &[&str] = &[
+    "schedule_scan",
+    "paths_changed",
+    "stage_or_unstage_entries",
+    "spawn_set_index_text_job",
+    "commit",
+    "run_hook",
+    "fetch",
+    "pull",
+    "push",
+    "reset",
+    "checkout_files",
+    "change_branch",
+    "create_branch",
+    "delete_branch",
+    "rename_branch",
+    "branches",
+    "stash_entries",
+    "stash_staged",
+    "stash_apply",
+    "stash_pop",
+    "stash_drop",
+    "create_remote",
+    "remove_remote",
+    "create_ref",
+    "edit_ref",
+    "add_path_to_gitignore",
+    "add_path_to_git_info_exclude",
+];
 const MERGE_ICON: &str = "icons/bolt/git_merge.svg";
 // Zed's git panel row height.
 const LIST_ITEM_HEIGHT: gpui::Rems = gpui::rems(1.75);
@@ -267,6 +298,9 @@ pub struct ScmPanel {
     open_commit_buffer: Option<Task<()>>,
     _commit_editor_subscription: Option<Subscription>,
     prefilled_merge_message: Option<SharedString>,
+    progress_visible: bool,
+    hide_progress: Option<Task<()>>,
+    _repository_subscription: Option<Subscription>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -343,6 +377,9 @@ impl ScmPanel {
                 open_commit_buffer: None,
                 _commit_editor_subscription: None,
                 prefilled_merge_message: None,
+                progress_visible: false,
+                hide_progress: None,
+                _repository_subscription: None,
                 _subscriptions: vec![
                     subscription,
                     settings_subscription,
@@ -359,6 +396,12 @@ impl ScmPanel {
         let changed = repository.as_ref().map(|repo| repo.entity_id())
             != self.repository.as_ref().map(|repo| repo.entity_id());
         self.repository = repository.clone();
+        if changed {
+            self._repository_subscription = repository
+                .as_ref()
+                .map(|repository| cx.observe(repository, |this, _, cx| this.update_progress(cx)));
+            self.update_progress(cx);
+        }
         self.update_sections(cx);
         if !changed && self.commit_editor.is_some() {
             return;
@@ -646,6 +689,37 @@ impl ScmPanel {
     fn refresh_after_operation(&mut self, repository: &Entity<Repository>, cx: &mut Context<Self>) {
         self.update_sections(cx);
         repository.update(cx, |repository, cx| repository.bolt_rescan(cx));
+    }
+
+    /// VS Code's `ProgressManager`: the bar appears as soon as an operation with `showProgress` runs and hides
+    /// once none has been running for 300 ms, so back-to-back operations don't make it flicker.
+    fn update_progress(&mut self, cx: &mut Context<Self>) {
+        let busy = self.repository.as_ref().is_some_and(|repository| {
+            repository
+                .read(cx)
+                .job_debug_queue()
+                .running()
+                .any(|job| PROGRESS_JOBS.contains(&job.description.as_ref()))
+        });
+        if busy {
+            self.hide_progress = None;
+            if !self.progress_visible {
+                self.progress_visible = true;
+                cx.notify();
+            }
+        } else if self.progress_visible && self.hide_progress.is_none() {
+            self.hide_progress = Some(cx.spawn(async move |this, cx| {
+                cx.background_executor()
+                    .timer(Duration::from_millis(300))
+                    .await;
+                this.update(cx, |this, cx| {
+                    this.progress_visible = false;
+                    this.hide_progress = None;
+                    cx.notify();
+                })
+                .ok();
+            }));
+        }
     }
 
     fn section_paths(&self, kind: SectionKind) -> Vec<RepoPath> {
@@ -1979,6 +2053,42 @@ fn commit_input_style(cx: &App) -> EditorStyle {
     git_ui::git_panel::git_commit_editor_style(font_size, cx)
 }
 
+/// VS Code's infinite progress bar (`progressbar.css`): a 2px bit, 2% wide, that crosses the view in 4 s, keyframes
+/// `translateX(0) scaleX(1)` → 50% `translateX(2500%) scaleX(3)` → `translateX(4900%) scaleX(1)`, scaled around its
+/// center.
+fn render_progress_bar(cx: &App) -> impl IntoElement {
+    const BIT_WIDTH: f32 = 0.02;
+    div()
+        .absolute()
+        .left_0()
+        .bottom_0()
+        .w_full()
+        .h(px(2.))
+        .overflow_hidden()
+        .child(
+            div()
+                .absolute()
+                .top_0()
+                .h_full()
+                .bg(cx.theme().colors().border_focused)
+                .with_animation(
+                    "bolt-scm-progress",
+                    gpui::Animation::new(Duration::from_secs(4)).repeat(),
+                    |bit, delta| {
+                        let (translate, scale) = if delta <= 0.5 {
+                            (25. * delta * 2., 1. + 2. * delta * 2.)
+                        } else {
+                            let delta = (delta - 0.5) * 2.;
+                            (25. + 24. * delta, 3. - 2. * delta)
+                        };
+                        let width = BIT_WIDTH * scale;
+                        let center = BIT_WIDTH * (translate + 0.5);
+                        bit.left(relative(center - width / 2.)).w(relative(width))
+                    },
+                ),
+        )
+}
+
 impl Render for ScmPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.rows();
@@ -1991,7 +2101,15 @@ impl Render for ScmPanel {
             .on_action(cx.listener(Self::commit))
             .size_full()
             .bg(cx.theme().colors().panel_background)
-            .child(self.render_header(cx))
+            .child(
+                div()
+                    .relative()
+                    .flex_none()
+                    .child(self.render_header(cx))
+                    .when(self.progress_visible, |this| {
+                        this.child(render_progress_bar(cx))
+                    }),
+            )
             .map(|this| {
                 if self.repository.is_none() {
                     this.child(
