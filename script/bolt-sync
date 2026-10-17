@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+# BOLT: merges a Zed stable release into Bolt, following notes/upstream-sync.md.
+# `main` = plain Zed (only fast-forwarded to stable tags), `bolt` = Bolt. The merge happens on `sync/<tag>`; `bolt`
+# moves only at --finish, after the checks pass. `bolt-pre-<tag>` is the rollback point.
+#
+# Usage:
+#   script/bolt-sync [vX.Y.Z]   start: fetch, fast-forward main, tag, merge on sync/<tag> (default: latest stable tag)
+#   script/bolt-sync --continue after resolving conflicts: commit the merge, bump .bolt-zed-version, run the checks
+#   script/bolt-sync --finish   fast-forward bolt to sync/<tag>, delete the branch, print the push command
+#   script/bolt-sync --abort    undo a sync in progress (merge, sync branch, rollback tag, main)
+#   script/bolt-sync --check    only the touch-point and marker checks against the current base
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$repo_root"
+
+fail() {
+    echo "bolt-sync: $*" >&2
+    exit 1
+}
+
+step() {
+    echo
+    echo "==> $*"
+}
+
+current_base() {
+    tr -d '[:space:]' < .bolt-zed-version
+}
+
+sync_tag_from_branch() {
+    local branch
+    branch="$(git branch --show-current)"
+    [[ "$branch" == sync/* ]] || fail "not on a sync/<tag> branch (on '$branch')"
+    echo "${branch#sync/}"
+}
+
+require_clean_tree() {
+    if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+        git status --short --untracked-files=no >&2
+        fail "working tree has uncommitted changes"
+    fi
+}
+
+# Upstream files changed by Bolt but missing from PROGRESS "Upstream touch points", and files whose `BOLT:` markers
+# disappeared compared with the rollback tag (a merge that silently dropped a Bolt edit).
+check_touch_points() {
+    local zed_ref="$1" previous_bolt_ref="$2"
+    local touch_points unlisted=()
+    # `dir/{a.rs,b.rs}` entries are expanded so each file can be matched.
+    touch_points="$(awk '/^## Upstream touch points/{inside=1; next} /^## /{inside=0} inside' PROGRESS.md |
+        perl -pe '1 while s{([\w./-]*)\{([^{}]*)\}([\w./-]*)}{join " ", map { "$1$_$3" } split /,/, $2}e')"
+
+    while IFS= read -r file; do
+        [[ -z "$file" ]] && continue
+        case "$file" in
+            crates/bolt_*|notes/*|PROGRESS.md|HANDOVER.md|CLAUDE.local.md|.bolt-zed-version|script/bolt-*) continue ;;
+        esac
+        if ! grep -qF -- "$file" <<< "$touch_points" && ! grep -qF -- "$(basename "$file")" <<< "$touch_points"; then
+            unlisted+=("$file")
+        fi
+    done < <(git diff --name-only --diff-filter=MD "$zed_ref" HEAD)
+
+    if ((${#unlisted[@]})); then
+        echo "Upstream files changed by Bolt but not in PROGRESS \"Upstream touch points\":"
+        printf '  %s\n' "${unlisted[@]}"
+    else
+        echo "Touch points: every changed upstream file is listed."
+    fi
+
+    local lost=()
+    while IFS= read -r file; do
+        [[ -z "$file" ]] && continue
+        local before after
+        before="$(git grep -c "BOLT:" "$previous_bolt_ref" -- "$file" 2>/dev/null | awk -F: '{print $NF}')"
+        after="$(git grep -c "BOLT:" HEAD -- "$file" 2>/dev/null | awk -F: '{print $NF}')"
+        if ((${after:-0} < ${before:-0})); then
+            lost+=("$file (${before} → ${after:-0})")
+        fi
+    done < <(git grep -l "BOLT:" "$previous_bolt_ref" -- . ':!crates/bolt_*' 2>/dev/null | sed "s|^$previous_bolt_ref:||")
+
+    if ((${#lost[@]})); then
+        echo "BOLT: markers lost in the merge (check each edit is still there, or was dropped on purpose):"
+        printf '  %s\n' "${lost[@]}"
+    else
+        echo "BOLT: markers: none lost."
+    fi
+}
+
+start() {
+    local new_tag="${1:-}"
+    local old_tag
+    old_tag="$(current_base)"
+
+    [[ "$(git branch --show-current)" == "bolt" ]] || fail "run from the bolt branch"
+    require_clean_tree
+    git config rerere.enabled true
+    git config rerere.autoupdate true
+
+    step "Fetching upstream tags"
+    git fetch upstream --tags --quiet
+
+    [[ "$(git rev-parse main)" == "$(git rev-parse "$old_tag^{commit}")" ]] ||
+        fail "main is not at $old_tag (.bolt-zed-version). main must be plain Zed: git branch -f main $old_tag"
+
+    if [[ -z "$new_tag" ]]; then
+        new_tag="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)"
+    fi
+    git rev-parse --verify --quiet "$new_tag^{commit}" > /dev/null || fail "unknown tag $new_tag"
+    [[ "$new_tag" != "$old_tag" ]] || fail "already on $old_tag"
+    [[ "$(printf '%s\n%s\n' "$old_tag" "$new_tag" | sort -V | tail -1)" == "$new_tag" ]] ||
+        fail "$new_tag is older than the current base $old_tag"
+    git rev-parse --verify --quiet "refs/tags/bolt-pre-$new_tag" > /dev/null &&
+        fail "tag bolt-pre-$new_tag exists: a sync to $new_tag was started before (--abort, or delete the tag)"
+
+    echo "Zed $old_tag → $new_tag ($(git rev-list --count "$old_tag..$new_tag") upstream commits)"
+
+    step "Fast-forwarding main to $new_tag"
+    git branch -f main "$new_tag"
+
+    step "Tagging the rollback point bolt-pre-$new_tag"
+    git tag "bolt-pre-$new_tag" bolt
+
+    step "Merging on sync/$new_tag"
+    git switch --quiet -c "sync/$new_tag" bolt
+    if git merge --no-ff --no-edit main -m "Merge Zed $new_tag into Bolt"; then
+        continue_sync
+        return
+    fi
+
+    # Recipes from notes/upstream-sync.md: these files always take upstream.
+    local conflicted
+    conflicted="$(git diff --name-only --diff-filter=U)"
+    for file in Cargo.lock rust-toolchain.toml; do
+        if grep -qxF "$file" <<< "$conflicted"; then
+            git checkout --theirs -- "$file"
+            git add -- "$file"
+            echo "Took upstream $file"
+        fi
+    done
+
+    conflicted="$(git diff --name-only --diff-filter=U)"
+    if [[ -z "$conflicted" ]]; then
+        git commit --no-edit --quiet
+        continue_sync
+        return
+    fi
+    echo
+    echo "Conflicts to resolve (recipes in notes/upstream-sync.md; Cargo.toml: keep upstream, re-add crates/bolt_*):"
+    printf '  %s\n' $conflicted
+    echo "Then: git add <files> && script/bolt-sync --continue   (or script/bolt-sync --abort)"
+    exit 1
+}
+
+continue_sync() {
+    local new_tag old_tag
+    new_tag="$(sync_tag_from_branch)"
+    old_tag="$(git show "bolt-pre-$new_tag:.bolt-zed-version" | tr -d '[:space:]')"
+
+    if git rev-parse --verify --quiet MERGE_HEAD > /dev/null; then
+        [[ -z "$(git diff --name-only --diff-filter=U)" ]] || fail "unresolved conflicts left"
+        git commit --no-edit --quiet
+    fi
+
+    if [[ "$(current_base)" != "$new_tag" ]]; then
+        echo "$new_tag" > .bolt-zed-version
+        git add .bolt-zed-version
+        git commit --quiet -m "Bolt: base version Zed $new_tag"
+    fi
+
+    step "Build, clippy, tests (build only), all-features check"
+    cargo build
+    ./script/clippy -p 'bolt_*' -p zed
+    cargo test -p zed --no-run
+    cargo check -p zed --features ai,collab,repl,debugger
+
+    step "Touch points"
+    check_touch_points "$new_tag" "bolt-pre-$new_tag"
+
+    echo
+    echo "Checks passed for Zed $old_tag → $new_tag. Before --finish:"
+    echo "  - smoke run: target/debug/bolt (watch stderr / ~/Library/Logs/Bolt/Bolt.log)"
+    echo "  - new visible \"Zed\" strings: see notes/rebrand-map.md"
+    echo "  - log the sync in PROGRESS.md (from → to, conflicts, time)"
+    echo "Then: script/bolt-sync --finish"
+}
+
+finish() {
+    local new_tag
+    new_tag="$(sync_tag_from_branch)"
+    require_clean_tree
+    [[ "$(current_base)" == "$new_tag" ]] || fail "run --continue first"
+
+    git switch --quiet bolt
+    git merge --ff-only --quiet "sync/$new_tag"
+    git branch -d "sync/$new_tag"
+    echo "bolt is on Zed $new_tag. Publish with:"
+    echo "  git push origin main bolt bolt-pre-$new_tag"
+}
+
+abort() {
+    local new_tag old_tag
+    new_tag="$(sync_tag_from_branch)"
+    old_tag="$(git show "bolt-pre-$new_tag:.bolt-zed-version" | tr -d '[:space:]')"
+
+    if git rev-parse --verify --quiet MERGE_HEAD > /dev/null; then
+        git merge --abort
+    fi
+    git switch --quiet bolt
+    git branch -D "sync/$new_tag"
+    git tag -d "bolt-pre-$new_tag"
+    git branch -f main "$old_tag"
+    echo "Sync to $new_tag aborted: bolt untouched, main back on $old_tag."
+}
+
+case "${1:-}" in
+    --continue) continue_sync ;;
+    --finish) finish ;;
+    --abort) abort ;;
+    --check) check_touch_points "$(current_base)" "$(git tag -l 'bolt-pre-*' | sort -V | tail -1)" ;;
+    -h|--help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' ;;
+    -*) fail "unknown option $1" ;;
+    *) start "${1:-}" ;;
+esac

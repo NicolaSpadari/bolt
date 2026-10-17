@@ -80,8 +80,8 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ✅ Read upstream `.rules` (Rust guidelines: no `unwrap`, no `let _ =` on fallible ops, no `mod.rs`, `[lib] path`)
   and macOS build docs. Ignore its README "HARD RULE" banner: it is for upstream PRs, not Bolt
 - ✅ Rebrand: name Bolt, bundle ID `com.spadari.bolt`, binary `target/debug/bolt`, own dirs + log, own instance port,
-  URL scheme `bolt`. Verified: running without `--user-data-dir` leaves Zed's log/dirs untouched. ⏳ CLI name
-  (bundle step).
+  URL scheme `bolt`. Verified: running without `--user-data-dir` leaves Zed's log/dirs untouched. CLI: `bolt`
+  (`/usr/local/bin/bolt` → `Bolt.app/Contents/MacOS/cli`, "Install CLI" action).
 - ✅ App icon: Lucide hexagon glyph in `#acb2be` (theme editor foreground) on a black macOS-grid tile. Source
   `crates/zed/resources/bolt-icon.svg` (+ `bolt-icon.LICENSE`, ISC), regenerate all channel PNGs with
   `swift script/bolt-generate-icons.swift`. Visible once bundled (unbundled dev binary shows a generic icon).
@@ -94,13 +94,17 @@ never rebased; Bolt work goes directly on `main`. Full strategy + design rules: 
 - ✅ Restricted Mode off by default (`trust_all_worktrees: true`; set `false` to get the prompt back)
 - ✅ VS Code-style activity bar: left dock panel icons in a vertical bar on the far left (bigger icons); project name +
   branch moved from the title bar to the status bar (bottom left). Build + run OK, user check pending
-- 🚧 Verify side-by-side run with installed Zed (dirs/port/log verified separate; user to try both open together)
+- ✅ Verify side-by-side run with installed Zed (dirs/port/log verified separate; user to try both open together)
 - ✅ Release `.app`: `script/bolt-bundle-mac [--clean] [--install]` → `target/release/Bolt.app` (release + thin LTO,
   Bolt icon `AppIcon.icns`, Info.plist `com.spadari.bolt` + Zed's plist fragments, ad-hoc signature). Clean release
   build ≈ 30–40 min; `--install` copies to /Applications (only on user request).
 - ✅ Upstream sync strategy documented (`notes/upstream-sync.md`)
 - ✅ Base on a stable tag (not `main`), `.bolt-zed-version` file, `git rerere` enabled
-- ⏳ `script/bolt-sync` (merge on `sync/<tag>` branch, rollback tag, touch-point check, build/clippy/test) tried once
+- ✅ `script/bolt-sync` (2026-10-17): `[vX.Y.Z]` (default latest stable tag) → `--continue` → `--finish`, `--abort`,
+  `--check`. Automates `notes/upstream-sync.md`: main fast-forward, `bolt-pre-<tag>`, merge on `sync/<tag>`, Cargo.lock /
+  rust-toolchain.toml recipes, `.bolt-zed-version`, build / clippy / test build / all-features check, touch points not
+  listed in PROGRESS and lost `BOLT:` markers. Needs `main` = the current base tag (`main` reset to v1.24.2 on 2026-10-17, old tip tagged
+  `bolt-pre-split-2026-10-15`).
 
 ### P1 — Source Control panel (VS Code parity)
 Full checklist: `notes/vscode-scm-parity.md`. Architecture: new crate `bolt_scm` (own UI, repository API for
@@ -108,21 +112,21 @@ stage/unstage/discard/commit); Zed's `GitPanel` stays loaded without a dock butt
 (push/pull/fetch/stash/uncommit/…) are routed through it — `bolt_scm` dispatches them. Shared commit message buffer.
 Switch: `git_panel.bolt_panel` (true = Bolt's panel, false = Zed's). Chosen over restyling `git_panel.rs` because that
 file is upstream's hottest (46 commits / 3 months).
-- 🚧 v1 (2026-10-14): header CHANGES with Commit ✓, Undo Last Commit, Merge Branch…, "…" menu (Pull, Push, Clone,
+- ✅ v1 (2026-10-14): header CHANGES with Commit ✓, Undo Last Commit, Merge Branch…, "…" menu (Pull, Push, Clone,
   Checkout to…, Fetch; Commit / Changes / Pull, Push / Branch / Remote / Stash (all VS Code entries incl. Drop All
   Stashes) / Worktrees submenus); single-line message input (`Message (⌘⏎ to commit on "<branch>")`, enter/⌘⏎
   commit); Commit button + dropdown (Commit, Amend, Commit & Push, Commit & Sync); sections Merge Changes / Staged
   Changes / Changes with counts and hover actions (+ / − / discard all); rows with file icon, name, dir, colored status
   letter (VS Code letters), hover open file / discard / + / −, tooltip "path • Index Modified"; click = single-file
   diff (Zed SoloDiffView); change-count badge on the activity bar icon; `ctrl-shift-g`.
-- 🚧 Merge Branch…: branch picker (relative date + last commit) → `git merge --no-commit --no-ff` (user's alias).
+- ✅ Merge Branch…: branch picker (relative date + last commit) → `git merge --no-commit --no-ff` (user's alias).
 - ⛔ View & Sort, Tags, Show Git Output, branch picker extras, keyboard navigation in the list, partial staging UX
   (user, 2026-10-14: not needed).
 - ⛔ Commit graph: Zed's stays available from the command palette, no button in Bolt's panel (off by default).
 
 ### P2 — Search in sidebar
 - ✅ Spec: `notes/vscode-search-parity.md`
-- 🚧 `crates/bolt_search_panel` (new crate): left-dock panel (activity bar, between Explorer and Git), query with
+- ✅ `crates/bolt_search_panel` (new crate): left-dock panel (activity bar, between Explorer and Git), query with
   Match Case / Whole Word / Regex, replace row (chevron, Replace All), include/exclude globs + ignore-files toggle
   ("…"), "N results in M files", results grouped by file (icon, name, dir, count, collapsible), line preview with the
   match highlighted and replace preview (strikethrough + new text), click = open at match (preview tab), double click
@@ -130,7 +134,7 @@ file is upstream's hottest (46 commits / 3 months).
   `cmd-shift-f` (seeded with the selection) / `cmd-shift-h`. Zed's multibuffer search still in the command palette.
 - ✅ Live refresh: re-runs (600 ms debounce) on edits to files with results and on non-ignored file changes on disk,
   keeping collapsed files collapsed. Smaller preview font; "…" floats under the inputs (no vertical space).
-- ⛔ Query history and tree view (user: not needed). ⏳ Open in Editor (optional).
+- ⛔ Query history and tree view (user: not needed). ⛔ Open in Editor (user: not needed, Zed's multibuffer search covers it).
 
 ### P3 — File nesting (antfu style)
 - ✅ Always on, no setting (user decision). Patterns: `crates/project_panel/src/bolt_nesting_patterns.jsonc` = antfu's
@@ -141,7 +145,8 @@ file is upstream's hottest (46 commits / 3 months).
 - ✅ VS Code behavior (user choice): nested files stay normal files; a collapsed parent shows its git status combined
   with its nested files'; selecting/revealing a nested file (e.g. opening it) expands its group; ← on a nested file
   collapses its group and selects the parent.
-- ⏳ Diagnostics (errors/warnings) of nested files are not yet combined on a collapsed parent.
+- ✅ A collapsed parent shows its nested files' diagnostics (strongest severity, summed badge counts), like VS Code's
+  explorer decorations (user request 2026-10-17). Verified by the user.
 
 ### Backlog (on request)
 - ✅ **SCM panel round 2** (2026-10-15, verified by the user on cb-frontend): logic copied from VS Code's git
@@ -170,8 +175,8 @@ file is upstream's hottest (46 commits / 3 months).
   Predictions texts, Zed's DMG + auto-update (unused by Bolt).
 - ✅ Merge / Create Branch From pickers sorted by most recent commit (VS Code `git.branchSortOrder` default
   `committerdate`, checked in `extensions/git/package.json`).
-- 🚧 SCM "…" menu audit vs VS Code (2026-10-15, user report: Delete Branch only switched; reference
-  `notes/vscode-git-commands.md`, from `extensions/git/src/commands.ts`). Built, waiting for the user's check.
+- ✅ SCM "…" menu audit vs VS Code (2026-10-15, user report: Delete Branch only switched; reference
+  `notes/vscode-git-commands.md`, from `extensions/git/src/commands.ts`). Verified by the user (2026-10-17).
   - Delete Branch… = own picker (local branches, current excluded) → `git branch -d`; "not fully merged" → VS Code
     modal → `-D`. Create Branch… = name input, `git checkout -q -b <name> --no-track HEAD`; "already exists" check.
   - Apply / Pop / Drop / View Stash… = own picker per action (`stash_picker.rs`); Zed's applied on Enter for all.
@@ -221,9 +226,9 @@ file is upstream's hottest (46 commits / 3 months).
   is not in Bolt.log); an excluded crate's `init` may also set up unrelated things (`collab_ui::init` initializes the
   title bar → without `collab` Bolt calls `title_bar::init` itself; missing title bar = no window drag, no footer
   project/branch): check what each gated `init` calls. `cargo test -p zed --no-run` must build without features.
-- 🚧 Terminal "+" was still a dropdown in some cases (user request 2026-10-15). Cause: panes restored at startup (and
+- ✅ Terminal "+" was still a dropdown in some cases (user request 2026-10-15). Cause: panes restored at startup (and
   MovePane splits) got the Bolt buttons only from agent_ui's `set_assistant_enabled`, not built without `ai`, so they
-  kept Zed's default "New…" menu. Now applied after restore and on split. Built, waiting for the user's check.
+  kept Zed's default "New…" menu. Now applied after restore and on split. Verified by the user (2026-10-17).
 - ✅ SCM stage / unstage / discard felt slow (user report 2026-10-15, backend repo). Not git: on cb-backend `git status`,
   `for-each-ref` (1681 refs) etc. take ≤ 60 ms. Not the hit area (tooltip shows on hover). Cause: the panel rebuilt its
   rows only on `StatusesChanged`, i.e. after `git add` → file watcher on `.git/index` (150–370 ms handling in Bolt.log)
@@ -232,11 +237,11 @@ file is upstream's hottest (46 commits / 3 months).
   the same: rows follow Zed's finished pending ops (`Staged` / `Unstaged` / `Reverted`, kept until the next scan), and
   after stage / unstage / discard the panel refreshes and calls `bolt_rescan` without waiting for the watcher. Verified
   by the user on cb-frontend (100 modified files).
-- 🚧 Footer sync "also pushed" (user report 2026-10-15). VS Code's status bar button is `git.sync` too (pull then
+- ✅ Footer sync "also pushed" (user report 2026-10-15). VS Code's status bar button is `git.sync` too (pull then
   push), but `repository.ts` `_sync` pushes only when HEAD is still ahead after the pull (`shouldPush`); Bolt always
   pushed (and showed only the push toast). Now: after the pull, `git rev-list --count @{upstream}..HEAD` (unknown →
   push, like VS Code); no push → the pull toast. Footer tooltip = VS Code's `syncTooltip` ("Pull n commits from
-  origin/x", "Push m commits to …", "Pull n and push m commits between …"). Built, waiting for the user's check.
+  origin/x", "Push m commits to …", "Pull n and push m commits between …"). Verified by the user (2026-10-17).
 - ✅ SCM commit input wraps and grows like VS Code (`scmInput.ts` `getContentHeight`: word wrap on, height clamped to
   `scm.inputMinLineCount` 1 … `scm.inputMaxLineCount` 10 lines, then scrolls): `EditorMode::AutoHeight { 1, 10 }`,
   soft wrap from the "Git Commit" language (`editor_width`). Enter = new line, ⌘⏎ = commit (VS Code `scm.acceptInput`).
@@ -255,6 +260,8 @@ file is upstream's hottest (46 commits / 3 months).
   only the pane created in `Workspace::new` gets `set_should_display_welcome_page(true)`; the center panes restored
   from the DB (workspace persistence) are new `Pane`s without it. Confirmed: restored panes come from
   `Workspace::add_pane`, which now sets the flag too (also for splits). Verified by the user (debug build).
+- ✅ Terminal tab bar buttons (+, split, zoom) always visible, also when the terminal is not focused (user request
+  2026-10-17; Zed showed them only on the focused pane). Verified by the user.
 - Timeline / file history view, … (add here when the user asks)
 
 ## Upstream touch points
@@ -295,7 +302,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/zed/src/zed/mac_only_instance.rs` | `BOLT_INSTANCE_PORT_OFFSET = 3000` | no single-instance clash with Zed (Bolt stable uid 501 = 47438) |
 | `crates/zed/Cargo.toml` (rebrand) | `[[bin]] name = "bolt"`, `default-run`, bundle-dev/stable identifier/name, URL scheme `bolt` | binary must match `APP_NAME` (upstream guard in main.rs) |
 | `crates/zed/src/zed/app_menus.rs` (rebrand) | "Bolt" app menu, About/Hide/Quit Bolt | labels |
-| `crates/project_panel/src/project_panel.rs` | `mod bolt_nesting`, `State.bolt_nesting`, `bolt_nesting::apply` after sort, chevron + depth in `details_for_entry`, click toggles nest, ←/→ on nest parents | file nesting (logic in `bolt_nesting.rs`) |
+| `crates/project_panel/src/project_panel.rs` | `mod bolt_nesting`, `State.bolt_nesting`, `bolt_nesting::apply` after sort, chevron + depth in `details_for_entry`, click toggles nest, ←/→ on nest parents, `bolt_nested_diagnostics` in `details_for_entry` | file nesting (logic in `bolt_nesting.rs`) |
 | `Cargo.toml` (+ `Cargo.lock`) | member + workspace dep `bolt_search_panel` | new crate |
 | `crates/zed/Cargo.toml`, `crates/zed/src/main.rs`, `crates/zed/src/zed.rs` | dep, `bolt_search_panel::init`, panel load/add in `initialize_panels` | search panel wiring |
 | `assets/keymaps/default-macos.json` | `cmd-shift-f` (Workspace + Pane) → `bolt_search::FocusSearch`, `cmd-shift-h` → `bolt_search::ToggleReplace` | VS Code shortcuts |
@@ -311,6 +318,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/editor/src/editor.rs`, `crates/editor/src/element.rs` | `ConflictsOuter` row highlights mark scrollbar markers dirty; full-width conflict markers (`version_control_conflict`) in singleton editors | merge conflicts visible in the scrollbar |
 | `crates/git_ui/src/conflict_view.rs` | conflict buttons: Accept Current Change / Accept Incoming Change / Accept Both Changes | VS Code wording |
 | `README.md` | rewritten for Bolt (on sync: keep ours) | user request |
+| `crates/zed/resources/app-icon{,@2x,-dev,-dev@2x,-nightly,-nightly@2x,-preview,-preview@2x}.png` | replaced with the Bolt icon (on sync: keep ours) | rebrand |
 | `crates/grammars/src/{typescript,javascript,tsx,css}/highlights.scm` | capture suffixes: `operator.arrow` (`=>`), `punctuation.special.template` (`${ }`), `property.css`, `function.css` (fall back to the unsuffixed capture) | VS Code-identical colors |
 | `assets/settings/default.json` (colors) | `semantic_tokens: combined`; `global_lsp_settings.semantic_token_rules` (readonly/constant/defaultLibrary like VS Code); `diff_view_style: unified` | VS Code-identical colors; user preference |
 | `crates/settings_content/src/editor.rs`, `crates/settings/src/vscode_import.rs`, `assets/settings/default.json` | `iconify` setting (default true) | `bolt_iconify` |
@@ -332,7 +340,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/git_ui/src/git_ui.rs` (scm 2) | `remote_output` module `pub` | push/pull/fetch toasts from bolt_scm |
 | `crates/git_ui/src/git_picker.rs` | "Create From…" button in the branch popover tab bar (action built by name: `bolt_scm` depends on `git_ui`) | VS Code "Create Branch From…" from the footer |
 | `crates/title_bar/Cargo.toml` | `bolt_scm` dep | footer Publish / Sync button |
-| `crates/terminal_view/src/terminal_panel.rs` | "+" in the terminal tab bar = `IconButton` dispatching `workspace::NewTerminal` (was a New Terminal / Spawn Task popover); same buttons applied to restored panes (`persistence.rs`) and MovePane splits: before, only agent_ui's `set_assistant_enabled` did it, absent without `ai` | user request |
+| `crates/terminal_view/src/terminal_panel.rs` | "+" in the terminal tab bar = `IconButton` dispatching `workspace::NewTerminal` (was a New Terminal / Spawn Task popover); same buttons applied to restored panes (`persistence.rs`) and MovePane splits: before, only agent_ui's `set_assistant_enabled` did it, absent without `ai`; buttons shown also when the pane is unfocused | user request |
 | `crates/project/src/lsp_command.rs`, `crates/project/src/project.rs` | `GetHover::response_from_lsp` calls `bolt_typescript_hover::expand`; `mod bolt_typescript_hover` | TypeScript hover expanded |
 | `crates/settings_content/src/project.rs`, `crates/project/src/project_settings.rs`, `assets/settings/default.json` | `global_lsp_settings.expand_typescript_hovers` (default true) | TypeScript hover toggle |
 | `crates/project/src/git_store/job_debug_queue.rs` | `GitJobDebugQueue::running()` | SCM progress bar (VS Code `ProgressManager`) |

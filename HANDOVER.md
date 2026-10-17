@@ -51,10 +51,8 @@ Framework: Rust + GPUI (Zed fork, base **v1.23.3**, commit 96a1b1b538) | Runtime
 - `.rules` contains a block injected by the context-mode plugin: never commit it.
 
 ### Next Steps (wait for the user to pick)
-1. If not done yet: the user resets `main` to Zed v1.23.3 (force push, blocked for the agent):
-   `git tag bolt-pre-split-2026-10-15 3cdc9304ef && git push origin bolt-pre-split-2026-10-15 && git branch -f main v1.23.3 && git push --force-with-lease=main:3cdc9304ef origin main`
-2. `script/bolt-sync` for the new branch model (`notes/upstream-sync.md`), then the first real sync to the latest Zed
-   stable tag.
+1. Done 2026-10-17: `main` = Zed v1.24.2 (old tip tagged `bolt-pre-split-2026-10-15`).
+2. `script/bolt-sync` exists (2026-10-17): first real sync to the latest Zed stable tag when the user asks.
 3. Release build + /Applications update when the user asks (after the features are done).
 4. Optional upstream PRs (user's call): Zed on-type format language fix, zed-extensions/vue `script_element` indent.
 5. Parked idea: addon + hooks architecture (`notes/addon-architecture.md`).

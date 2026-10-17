@@ -5,11 +5,13 @@
 //! parent file name (one optional `*`, whose match is `$(capture)`), each comma-separated value is a glob for sibling
 //! files nested under it. Only files nest, only within the same directory, and nesting is one level deep.
 
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use collections::{HashMap, HashSet};
-use project::{GitEntry, ProjectEntryId};
+use language::DiagnosticSeverity;
+use project::{GitEntry, ProjectEntryId, WorktreeId};
 use serde::Deserialize;
+use util::rel_path::RelPath;
 
 #[derive(Deserialize)]
 struct PatternsFile {
@@ -102,6 +104,8 @@ pub(crate) struct NestingState {
     parents: HashSet<ProjectEntryId>,
     /// Files shown nested under a parent (rendered one level deeper), mapped to that parent.
     nested: HashMap<ProjectEntryId, ProjectEntryId>,
+    /// Paths of the files hidden under a collapsed parent.
+    collapsed_children: HashMap<ProjectEntryId, Vec<Arc<RelPath>>>,
 }
 
 impl NestingState {
@@ -218,6 +222,10 @@ pub(crate) fn apply(
             for child in &children {
                 entry.git_summary += child.git_summary;
             }
+            state.collapsed_children.insert(
+                entry_id,
+                children.iter().map(|child| child.path.clone()).collect(),
+            );
             entries.push(entry);
         }
     }
@@ -402,6 +410,31 @@ impl crate::ProjectPanel {
         }
         self.update_visible_entries(Some((worktree_id, entry_id)), false, false, window, cx);
         cx.notify();
+    }
+
+    /// A collapsed nesting parent shows the strongest diagnostic and the summed counts of its nested files, like
+    /// VS Code's explorer decorations.
+    pub(crate) fn bolt_nested_diagnostics(
+        &self,
+        worktree_id: WorktreeId,
+        entry_id: ProjectEntryId,
+        severity: &mut Option<DiagnosticSeverity>,
+        count: &mut Option<crate::DiagnosticCount>,
+    ) {
+        let Some(child_paths) = self.state.bolt_nesting.collapsed_children.get(&entry_id) else {
+            return;
+        };
+        for child_path in child_paths {
+            let key = (worktree_id, child_path.clone());
+            if let Some(&child_severity) = self.diagnostics.get(&key) {
+                *severity = Some(severity.map_or(child_severity, |own| own.min(child_severity)));
+            }
+            if let Some(child_count) = self.diagnostic_counts.get(&key) {
+                let total = count.get_or_insert_default();
+                total.error_count += child_count.error_count;
+                total.warning_count += child_count.warning_count;
+            }
+        }
     }
 
     pub(crate) fn bolt_toggle_nested(

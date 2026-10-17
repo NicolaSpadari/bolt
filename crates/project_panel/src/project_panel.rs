@@ -7060,15 +7060,22 @@ impl ProjectPanel {
         let is_marked = self.marked_entries.contains(&selection);
         let is_selected = self.selection == Some(selection);
 
-        let diagnostic_severity = self
+        let mut diagnostic_severity = self
             .diagnostics
             .get(&(worktree_id, entry.path.clone()))
             .cloned();
 
-        let diagnostic_count = self
+        let mut diagnostic_count = self
             .diagnostic_counts
             .get(&(worktree_id, entry.path.clone()))
             .copied();
+        // BOLT: a collapsed nesting parent also shows its nested files' diagnostics.
+        self.bolt_nested_diagnostics(
+            worktree_id,
+            entry.id,
+            &mut diagnostic_severity,
+            &mut diagnostic_count,
+        );
 
         let diagnostic_mark = if icon.is_some() || chevron.is_some() {
             entry_diagnostic_aware_icon_decoration_and_color(diagnostic_severity).map(

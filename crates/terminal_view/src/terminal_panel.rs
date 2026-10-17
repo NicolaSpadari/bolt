@@ -126,21 +126,12 @@ impl TerminalPanel {
     ) {
         let assistant_enabled = self.assistant_enabled;
         terminal_pane.update(cx, |pane, cx| {
-            pane.set_render_tab_bar_buttons(cx, move |pane, window, cx| {
+            pane.set_render_tab_bar_buttons(cx, move |pane, _window, cx| {
                 let split_context = pane
                     .active_item()
                     .and_then(|item| item.downcast::<TerminalView>())
                     .map(|terminal_view| terminal_view.read(cx).focus_handle.clone());
-                let has_focused_rename_editor = pane
-                    .active_item()
-                    .and_then(|item| item.downcast::<TerminalView>())
-                    .is_some_and(|view| view.read(cx).rename_editor_is_focused(window, cx));
-                if !pane.has_focus(window, cx)
-                    && !pane.context_menu_focused(window, cx)
-                    && !has_focused_rename_editor
-                {
-                    return (None, None);
-                }
+                // BOLT: buttons always visible, like VS Code (Zed hid them while the pane was unfocused).
                 let focus_handle = pane.focus_handle(cx);
                 let right_children = h_flex()
                     .gap(DynamicSpacing::Base02.rems(cx))
