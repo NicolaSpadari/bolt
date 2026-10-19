@@ -49,8 +49,9 @@ use std::time::Duration;
 use theme::ActiveTheme;
 use title_bar_settings::TitleBarSettings;
 use ui::{
-    Avatar, ButtonLike, ContextMenu, ContextMenuEntry, IconWithIndicator, Indicator, PopoverMenu,
-    PopoverMenuHandle, TintColor, Tooltip, prelude::*, utils::platform_title_bar_height,
+    Avatar, ButtonLike, CommonAnimationExt as _, ContextMenu, ContextMenuEntry, IconWithIndicator,
+    Indicator, PopoverMenu, PopoverMenuHandle, TintColor, Tooltip, prelude::*,
+    utils::platform_title_bar_height,
 };
 use update_version::UpdateVersion;
 use util::ResultExt;
@@ -492,7 +493,9 @@ impl TitleBar {
         subscriptions.push(
             cx.subscribe(&git_store, move |_, _, event, cx| match event {
                 GitStoreEvent::ActiveRepositoryChanged(_)
-                | GitStoreEvent::RepositoryUpdated(_, _, true) => {
+                | GitStoreEvent::RepositoryUpdated(_, _, true)
+                // BOLT: the branch shows a running `git switch`.
+                | GitStoreEvent::JobsUpdated => {
                     cx.notify();
                 }
                 _ => {}
@@ -978,6 +981,7 @@ impl TitleBar {
 
             (branch_name, icon_info, is_detached_head)
         };
+        let checkout_target = repository.read(cx).bolt_checkout_target();
 
         let settings = TitleBarSettings::get_global(cx);
         let effective_repository = Some(repository);
@@ -1042,6 +1046,28 @@ impl TitleBar {
 
         let branch_picker = branch_name.and_then(|branch_name| {
             settings.show_branch_name.then(|| {
+                // BOLT: VS Code's `CheckoutStatusBar`: while `git switch` runs (hooks included), the target branch
+                // with a spinner, not clickable, instead of the old branch that looks like a failed switch.
+                if let Some(target) = checkout_target {
+                    return ButtonLike::new("project_branch_trigger")
+                        .disabled(true)
+                        .child(
+                            h_flex()
+                                .gap_1()
+                                .child(
+                                    Icon::new(IconName::ArrowCircle)
+                                        .size(IconSize::XSmall)
+                                        .color(Color::Muted)
+                                        .with_rotate_animation(2),
+                                )
+                                .child(
+                                    Label::new(target)
+                                        .size(LabelSize::Small)
+                                        .color(Color::Muted),
+                                ),
+                        )
+                        .into_any_element();
+                }
                 let branch_tooltip_label = branch_name.clone();
                 let (branch_icon, branch_icon_color) = if settings.show_branch_status_icon {
                     icon_info
@@ -1095,6 +1121,7 @@ impl TitleBar {
                         )
                     })
                     .anchor(gpui::Anchor::TopLeft)
+                    .into_any_element()
             })
         });
 

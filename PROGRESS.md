@@ -344,6 +344,8 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/project/src/lsp_command.rs`, `crates/project/src/project.rs` | `GetHover::response_from_lsp` calls `bolt_typescript_hover::expand`; `mod bolt_typescript_hover` | TypeScript hover expanded |
 | `crates/settings_content/src/project.rs`, `crates/project/src/project_settings.rs`, `assets/settings/default.json` | `global_lsp_settings.expand_typescript_hovers` (default true) | TypeScript hover toggle |
 | `crates/project/src/git_store/job_debug_queue.rs` | `GitJobDebugQueue::running()` | SCM progress bar (VS Code `ProgressManager`) |
+| `crates/project/src/git_store.rs` (scm 3) | `send_keyed_job` emits `JobsUpdated` again (upstream bug: nothing emitted it); `Repository::bolt_stage_tracked` (save dirty buffers + fresh `git status` + stage, in the job queue); `Repository::bolt_checkout_target` (field `bolt_checkout`, set by `change_branch` / `create_branch`, cleared by the scan after the checkout) | stale "git switch" in the footer; Commit Tracked like VS Code `commit --all`; footer checkout spinner |
+| `crates/title_bar/src/title_bar.rs` (scm 3) | notify on `GitStoreEvent::JobsUpdated`; branch button shows target + spinner, disabled, while `git switch` runs | VS Code `CheckoutStatusBar` |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -412,3 +414,12 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   filtering (Zed `Picker::select_on_hover` default true: filtered rows re-enter under the cursor) → `select_on_hover`
   false, like VS Code's quick pick (hover only highlights). SCM progress bar like VS Code (`ProgressManager` +
   `showProgress` in `operation.ts`; infinite 2px bar, hidden 300 ms after the last running job). Verified by the user.
+- 2026-10-19: ✅ SCM stability round (user report: branch looked stale after switching, Commit Tracked missed files,
+  Staged collapsed after staging). Causes: (1) upstream `Repository` never emitted `JobsUpdated` → the activity
+  indicator kept "git switch …" after the job ended; (2) PMS `post-checkout` hook (nvm + `nlx nuxi prepare`, ~2.5 s)
+  blocks the serial git queue, the footer kept the old branch → retries; (3) Commit Tracked staged the cached snapshot,
+  missing files saved just before (autosave on focus change). Fixes: emit `JobsUpdated`; footer shows target branch +
+  spinner while `git switch` runs (VS Code `CheckoutStatusBar`); Commit Tracked = `bolt_stage_tracked` (VS Code
+  `git commit --all`); staging expands Staged. Footer flicker (old branch back between the end of `git switch` and the
+  next scan) → target kept until that scan. PMS `post-checkout` hook disabled on request (`.git/hooks/post-checkout.disabled`).
+  Verified by the user.

@@ -700,6 +700,8 @@ pub struct Repository {
     job_sender: mpsc::UnboundedSender<GitJob>,
     _worker_task: Task<()>,
     active_jobs: HashMap<JobId, JobInfo>,
+    // BOLT: see `bolt_checkout_target`.
+    bolt_checkout: Option<BoltCheckout>,
     job_debug_queue: job_debug_queue::GitJobDebugQueue,
     pending_ops: SumTree<PendingOps>,
     job_id: JobId,
@@ -878,6 +880,12 @@ pub struct GitJob {
     id: JobId,
     job: Box<dyn FnOnce(RepositoryState, &mut AsyncApp) -> Task<()>>,
     key: Option<GitJobKey>,
+}
+
+// BOLT: see `Repository::bolt_checkout_target`.
+struct BoltCheckout {
+    target: SharedString,
+    finished: bool,
 }
 
 #[derive(PartialEq, Eq)]
@@ -6565,6 +6573,7 @@ impl Repository {
         self.job_sender.close_channel();
         self._worker_task = Task::ready(());
         self.active_jobs.clear();
+        self.bolt_checkout = None;
         self.job_debug_queue
             .mark_unfinished_complete(job_debug_queue::CompletedJobStatus::Skipped);
         cx.notify();
@@ -6636,6 +6645,7 @@ impl Repository {
             job_sender: mpsc::unbounded().0,
             job_id: 0,
             active_jobs: Default::default(),
+            bolt_checkout: None,
             job_debug_queue: job_debug_queue::GitJobDebugQueue::new(),
             initial_graph_data: Default::default(),
             commit_data: Default::default(),
@@ -6687,6 +6697,7 @@ impl Repository {
             askpass_delegates: Default::default(),
             latest_askpass_id: 0,
             active_jobs: Default::default(),
+            bolt_checkout: None,
             job_debug_queue: job_debug_queue::GitJobDebugQueue::new(),
             job_id: 0,
             initial_graph_data: Default::default(),
@@ -6963,6 +6974,9 @@ impl Repository {
                                 );
                             }
                             cx.notify();
+                            // BOLT: nothing emitted this any more, so the activity indicator kept showing a
+                            // finished job (e.g. "git switch …") until something else redrew it.
+                            cx.emit(JobsUpdated);
                         })
                         .ok();
 
@@ -6975,6 +6989,7 @@ impl Repository {
                             );
                             this.active_jobs.remove(&job_id);
                             cx.notify();
+                            cx.emit(JobsUpdated);
                         })
                         .ok();
 
@@ -9826,53 +9841,73 @@ impl Repository {
         } else {
             format!("git switch -c {branch_name}").into()
         };
+        let this = self.this.clone();
+        self.bolt_start_checkout(&branch_name);
         self.send_job(
             "create_branch",
             Some(status_msg),
-            move |repo, _cx| async move {
-                match repo {
-                    RepositoryState::Local(LocalRepositoryState { backend, .. }) => {
-                        backend.create_branch(branch_name, base_branch).await
-                    }
-                    RepositoryState::Remote(RemoteRepositoryState { project_id, client }) => {
-                        client
-                            .request(proto::GitCreateBranch {
-                                project_id: project_id.0,
-                                repository_id: id.to_proto(),
-                                branch_name,
-                                base_branch,
-                            })
-                            .await?;
+            move |repo, mut cx| async move {
+                let result = async move {
+                    match repo {
+                        RepositoryState::Local(LocalRepositoryState { backend, .. }) => {
+                            backend.create_branch(branch_name, base_branch).await
+                        }
+                        RepositoryState::Remote(RemoteRepositoryState { project_id, client }) => {
+                            client
+                                .request(proto::GitCreateBranch {
+                                    project_id: project_id.0,
+                                    repository_id: id.to_proto(),
+                                    branch_name,
+                                    base_branch,
+                                })
+                                .await?;
 
-                        Ok(())
+                            Ok(())
+                        }
                     }
                 }
+                .await;
+                this.update(&mut cx, |this, cx| {
+                    this.bolt_finish_checkout(result.is_ok(), cx)
+                })
+                .ok();
+                result
             },
         )
     }
 
     pub fn change_branch(&mut self, branch_name: String) -> oneshot::Receiver<Result<()>> {
         let id = self.id;
+        let this = self.this.clone();
+        self.bolt_start_checkout(&branch_name);
         self.send_job(
             "change_branch",
             Some(format!("git switch {branch_name}").into()),
-            move |repo, _cx| async move {
-                match repo {
-                    RepositoryState::Local(LocalRepositoryState { backend, .. }) => {
-                        backend.change_branch(branch_name).await
-                    }
-                    RepositoryState::Remote(RemoteRepositoryState { project_id, client }) => {
-                        client
-                            .request(proto::GitChangeBranch {
-                                project_id: project_id.0,
-                                repository_id: id.to_proto(),
-                                branch_name,
-                            })
-                            .await?;
+            move |repo, mut cx| async move {
+                let result = async move {
+                    match repo {
+                        RepositoryState::Local(LocalRepositoryState { backend, .. }) => {
+                            backend.change_branch(branch_name).await
+                        }
+                        RepositoryState::Remote(RemoteRepositoryState { project_id, client }) => {
+                            client
+                                .request(proto::GitChangeBranch {
+                                    project_id: project_id.0,
+                                    repository_id: id.to_proto(),
+                                    branch_name,
+                                })
+                                .await?;
 
-                        Ok(())
+                            Ok(())
+                        }
                     }
                 }
+                .await;
+                this.update(&mut cx, |this, cx| {
+                    this.bolt_finish_checkout(result.is_ok(), cx)
+                })
+                .ok();
+                result
             },
         )
     }
@@ -10215,6 +10250,100 @@ impl Repository {
         if let Some(updates_tx) = scan_updates_tx {
             self.schedule_scan(updates_tx, cx);
         }
+    }
+
+    // BOLT: VS Code's smart commit (`git commit --all`) for the source control panel. The tracked changes are read
+    // by a `git status` run in the job queue, after saving the repository's dirty buffers: the cached snapshot
+    // misses files saved since the last scan (e.g. autosave on focus change when clicking Commit).
+    pub fn bolt_stage_tracked(&mut self, cx: &mut Context<Self>) -> Task<Result<()>> {
+        let dirty_paths = self
+            .buffer_store(cx)
+            .map(|buffer_store| {
+                buffer_store
+                    .read(cx)
+                    .buffers()
+                    .filter_map(|buffer| {
+                        let buffer = buffer.read(cx);
+                        if !buffer.has_unsaved_edits() {
+                            return None;
+                        }
+                        let project_path = ProjectPath::from_file(buffer.file()?.as_ref(), cx);
+                        self.project_path_to_repo_path(&project_path, cx)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let save_tasks = self.save_buffers(&dirty_paths, cx);
+        cx.spawn(async move |this, cx| {
+            for save_task in save_tasks {
+                save_task.await?;
+            }
+            this.update(cx, |this, _| {
+                this.send_job(
+                    "stage_or_unstage_entries",
+                    Some("git add -u".into()),
+                    |state, _| async move {
+                        let RepositoryState::Local(LocalRepositoryState {
+                            backend,
+                            environment,
+                            ..
+                        }) = state
+                        else {
+                            bail!("not a local repository")
+                        };
+                        let root = RepoPath::from_rel_path(
+                            RelPath::new(".".as_ref(), PathStyle::local())?.as_ref(),
+                        );
+                        let status = backend.status(&[root]).await?;
+                        let tracked_changes = status
+                            .entries
+                            .iter()
+                            .filter(|(_, status)| {
+                                !status.is_untracked()
+                                    && !status.is_ignored()
+                                    && !status.is_conflicted()
+                                    && status.staging().has_unstaged()
+                            })
+                            .map(|(repo_path, _)| repo_path.clone())
+                            .collect::<Vec<_>>();
+                        if tracked_changes.is_empty() {
+                            return Ok(());
+                        }
+                        backend.stage_paths(tracked_changes, environment).await
+                    },
+                )
+            })?
+            .await?
+        })
+    }
+
+    // BOLT: the branch being checked out, shown by the status bar from the request until the status scan that
+    // follows the checkout (VS Code's `CheckoutStatusBar`): between the end of `git switch` and that scan, the
+    // snapshot still names the old branch, which flickered back for a moment.
+    pub fn bolt_checkout_target(&self) -> Option<SharedString> {
+        self.bolt_checkout
+            .as_ref()
+            .map(|checkout| checkout.target.clone())
+    }
+
+    fn bolt_start_checkout(&mut self, target: &str) {
+        self.bolt_checkout = Some(BoltCheckout {
+            target: target.to_string().into(),
+            finished: false,
+        });
+    }
+
+    fn bolt_finish_checkout(&mut self, succeeded: bool, cx: &mut Context<Self>) {
+        if succeeded {
+            if let Some(checkout) = &mut self.bolt_checkout {
+                checkout.finished = true;
+            }
+            // Without a HEAD change (e.g. the current branch) the watcher wouldn't scan.
+            self.bolt_rescan(cx);
+        } else {
+            self.bolt_checkout = None;
+        }
+        cx.emit(JobsUpdated);
     }
 
     fn schedule_scan(
@@ -12854,6 +12983,16 @@ async fn compute_snapshot(
 
         if worktrees_changed {
             cx.emit(RepositoryEvent::GitWorktreeListChanged);
+        }
+
+        // BOLT: jobs run one at a time, so this scan started after the checkout ended.
+        if this
+            .bolt_checkout
+            .as_ref()
+            .is_some_and(|checkout| checkout.finished)
+        {
+            this.bolt_checkout = None;
+            cx.emit(JobsUpdated);
         }
 
         this.snapshot.clone()

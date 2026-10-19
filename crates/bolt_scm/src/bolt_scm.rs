@@ -662,6 +662,10 @@ impl ScmPanel {
         if paths.is_empty() {
             return;
         }
+        if stage {
+            // User request: staged files are always visible, even if the section was collapsed earlier.
+            self.collapsed.retain(|kind| *kind != SectionKind::Staged);
+        }
         let task = repository.update(cx, |repository, cx| {
             if stage {
                 repository.stage_entries(paths, cx)
@@ -938,18 +942,14 @@ impl ScmPanel {
             window.focus(&editor.focus_handle(cx), cx);
             return;
         }
-        let stage_first: Vec<RepoPath> = if self.has_staged() {
-            Vec::new()
-        } else {
-            self.sections
-                .iter()
-                .filter(|section| section.kind == SectionKind::Changes)
-                .flat_map(|section| section.entries.iter())
-                .filter(|entry| !entry.status.is_created())
-                .map(|entry| entry.repo_path.clone())
-                .collect()
-        };
-        if !self.has_staged() && stage_first.is_empty() && !options.amend {
+        let commit_tracked = !self.has_staged();
+        let has_tracked_changes = self
+            .sections
+            .iter()
+            .filter(|section| section.kind == SectionKind::Changes)
+            .flat_map(|section| section.entries.iter())
+            .any(|entry| !entry.status.is_created());
+        if commit_tracked && !has_tracked_changes && !options.amend {
             let prompt = window.prompt(
                 PromptLevel::Info,
                 "There are no changes to commit.",
@@ -964,11 +964,11 @@ impl ScmPanel {
         let workspace = self.workspace.clone();
         self.pending_commit = Some(cx.spawn_in(window, async move |this, cx| {
             let result: Result<()> = async {
-                if !stage_first.is_empty() {
+                // VS Code commits with `--all`: the tracked changes are read when committing, not from the list
+                // shown, which can predate files saved just before.
+                if commit_tracked {
                     repository
-                        .update(cx, |repository, cx| {
-                            repository.stage_entries(stage_first, cx)
-                        })
+                        .update(cx, |repository, cx| repository.bolt_stage_tracked(cx))
                         .await?;
                 }
                 repository
