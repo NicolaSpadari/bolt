@@ -25,7 +25,7 @@ use git::{
 use git_ui::{
     git_panel::GitStatusEntry,
     remote_output::{self, RemoteAction, SuccessMessage, SuccessStyle},
-    solo_diff_view::SoloDiffView,
+    solo_diff_view::{SoloDiffBase, SoloDiffView},
 };
 use git_ui_core::{askpass_modal::AskPassModal, notifications::show_error_toast};
 use gpui::{
@@ -614,6 +614,12 @@ impl ScmPanel {
             Section { kind, entries }
         })
         .collect();
+        // VS Code's `SCMTreeFilter` only hides an empty group, so its node keeps the collapse state; the groups leave
+        // the tree (and come back expanded, `collapseByDefault`) only when there are no changes at all
+        // (`hasSomeChanges` in `scmViewPane.ts`).
+        if self.change_count() == 0 {
+            self.collapsed.clear();
+        }
         // Keep the selected file selected across refreshes, like VS Code's tree.
         self.selected = previous_selection.and_then(|(kind, repo_path)| {
             self.sections
@@ -661,10 +667,6 @@ impl ScmPanel {
         };
         if paths.is_empty() {
             return;
-        }
-        if stage {
-            // User request: staged files are always visible, even if the section was collapsed earlier.
-            self.collapsed.retain(|kind| *kind != SectionKind::Staged);
         }
         let task = repository.update(cx, |repository, cx| {
             if stage {
@@ -823,11 +825,10 @@ impl ScmPanel {
             return;
         };
         self.selected = Some(Row::Entry(section_ix, entry_ix));
-        let in_merge = self
-            .sections
-            .get(section_ix)
-            .is_some_and(|section| section.kind == SectionKind::Merge);
-        if in_merge {
+        let Some(kind) = self.sections.get(section_ix).map(|section| section.kind) else {
+            return;
+        };
+        if kind == SectionKind::Merge {
             // Zed's conflict actions (Accept Current / Incoming / Both) only exist in the plain file editor.
             self.open_file(&entry, window, cx);
             cx.notify();
@@ -841,8 +842,16 @@ impl ScmPanel {
             cx.notify();
             return;
         }
-        SoloDiffView::open_or_focus(
+        // VS Code (`getLeftResource` / `getRightResource` in `extensions/git/src/repository.ts`): a change opens
+        // Index ↔ Working Tree, so staged edits drop out of it; a staged file opens HEAD ↔ Index.
+        let base = if kind == SectionKind::Staged {
+            SoloDiffBase::Index
+        } else {
+            SoloDiffBase::WorkingTree
+        };
+        SoloDiffView::bolt_open_or_focus(
             GitStatusEntry::bolt_new(entry.repo_path, entry.status),
+            base,
             repository,
             self.workspace.clone(),
             window,
@@ -942,18 +951,12 @@ impl ScmPanel {
             window.focus(&editor.focus_handle(cx), cx);
             return;
         }
-        let commit_tracked = !self.has_staged();
-        let has_tracked_changes = self
-            .sections
-            .iter()
-            .filter(|section| section.kind == SectionKind::Changes)
-            .flat_map(|section| section.entries.iter())
-            .any(|entry| !entry.status.is_created());
-        if commit_tracked && !has_tracked_changes && !options.amend {
+        let commit_all = !self.has_staged();
+        if commit_all && self.change_count() == 0 && !options.amend {
             let prompt = window.prompt(
                 PromptLevel::Info,
                 "There are no changes to commit.",
-                Some("Stage untracked files with + to include them."),
+                None,
                 &["OK"],
                 cx,
             );
@@ -964,11 +967,12 @@ impl ScmPanel {
         let workspace = self.workspace.clone();
         self.pending_commit = Some(cx.spawn_in(window, async move |this, cx| {
             let result: Result<()> = async {
-                // VS Code commits with `--all`: the tracked changes are read when committing, not from the list
-                // shown, which can predate files saved just before.
-                if commit_tracked {
+                // VS Code's smart commit with its defaults (`git.smartCommitChanges: all`, `git.untrackedChanges:
+                // mixed`) runs `git add -A` before committing. The changes are read when committing, not from the list
+                // shown, which can predate files saved or created just before.
+                if commit_all {
                     repository
-                        .update(cx, |repository, cx| repository.bolt_stage_tracked(cx))
+                        .update(cx, |repository, cx| repository.bolt_stage_all(cx))
                         .await?;
                 }
                 repository
@@ -1570,8 +1574,7 @@ impl ScmPanel {
             }
         } else {
             match primary_action {
-                PrimaryAction::Commit if self.has_staged() => "Commit".into(),
-                PrimaryAction::Commit => "Commit Tracked".into(),
+                PrimaryAction::Commit => "Commit".into(),
                 PrimaryAction::Publish => "Publish Branch".into(),
                 PrimaryAction::Sync { ahead, behind } => {
                     let mut label = "Sync Changes".to_string();

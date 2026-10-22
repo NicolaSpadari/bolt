@@ -37,7 +37,17 @@ use workspace::{
     searchable::SearchableItemHandle,
 };
 
+// BOLT: what the diff compares, like VS Code's SCM resources: a file under Changes opens Index ↔ Working Tree, one
+// under Staged opens HEAD ↔ Index (`getLeftResource` / `getRightResource` in `extensions/git/src/repository.ts`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SoloDiffBase {
+    Head,
+    WorkingTree,
+    Index,
+}
+
 pub struct SoloDiffView {
+    base: SoloDiffBase, // BOLT
     repository: Entity<Repository>,
     repository_id: RepositoryId,
     repo_path: RepoPath,
@@ -57,6 +67,18 @@ impl SoloDiffView {
         window: &mut Window,
         cx: &mut App,
     ) -> Task<Result<Entity<Self>>> {
+        Self::bolt_open_or_focus(entry, SoloDiffBase::Head, repository, workspace, window, cx)
+    }
+
+    // BOLT: `open_or_focus` with the diff base chosen by the caller (the source control panel's section).
+    pub fn bolt_open_or_focus(
+        entry: GitStatusEntry,
+        base: SoloDiffBase,
+        repository: Entity<Repository>,
+        workspace: WeakEntity<Workspace>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Task<Result<Entity<Self>>> {
         let Some(workspace_entity) = workspace.upgrade() else {
             return Task::ready(Err(anyhow::anyhow!("workspace was dropped")));
         };
@@ -64,7 +86,10 @@ impl SoloDiffView {
         let existing = workspace_entity
             .read(cx)
             .items_of_type::<SoloDiffView>(cx)
-            .find(|item| item.read(cx).matches(&repository, &entry.repo_path, cx));
+            .find(|item| {
+                item.read(cx).matches(&repository, &entry.repo_path, cx)
+                    && item.read(cx).base == base
+            });
         if let Some(existing) = existing {
             workspace_entity.update(cx, |workspace, cx| {
                 workspace.activate_item(&existing, true, true, window, cx);
@@ -91,16 +116,37 @@ impl SoloDiffView {
                     project.open_buffer(project_path.clone(), cx)
                 })
                 .await?;
-            let diff = project
-                .update(cx, |project, cx| {
-                    project.open_uncommitted_diff(buffer.clone(), cx)
-                })
-                .await?;
+            // BOLT: the Index diff shows the index text (read-only) against HEAD.
+            let (buffer, diff) = match base {
+                SoloDiffBase::Head => {
+                    let diff = project
+                        .update(cx, |project, cx| {
+                            project.open_uncommitted_diff(buffer.clone(), cx)
+                        })
+                        .await?;
+                    (buffer, diff)
+                }
+                SoloDiffBase::WorkingTree => {
+                    let diff = project
+                        .update(cx, |project, cx| {
+                            project.open_unstaged_diff(buffer.clone(), cx)
+                        })
+                        .await?;
+                    (buffer, diff)
+                }
+                SoloDiffBase::Index => {
+                    let (diff, index_buffer) = project
+                        .update(cx, |project, cx| project.open_staged_diff(buffer, cx))
+                        .await?;
+                    (index_buffer, diff)
+                }
+            };
 
             workspace_entity.update_in(cx, |workspace, window, cx| {
                 let workspace_handle = cx.entity();
                 let view = cx.new(|cx| {
                     Self::new(
+                        base,
                         project,
                         repository,
                         repo_path,
@@ -119,6 +165,7 @@ impl SoloDiffView {
     }
 
     fn new(
+        base: SoloDiffBase,
         project: Entity<Project>,
         repository: Entity<Repository>,
         repo_path: RepoPath,
@@ -173,6 +220,7 @@ impl SoloDiffView {
             });
 
         Self {
+            base,
             repository,
             repository_id,
             repo_path,
@@ -294,6 +342,18 @@ impl SoloDiffView {
         let mut stage = false;
         let mut unstage = false;
         for hunk in editor.diff_hunks_in_ranges(&ranges, &snapshot) {
+            // BOLT: the Working Tree / Index diffs have no secondary diff: their hunks can only be staged / unstaged.
+            match self.base {
+                SoloDiffBase::Head => {}
+                SoloDiffBase::WorkingTree => {
+                    stage = true;
+                    continue;
+                }
+                SoloDiffBase::Index => {
+                    unstage = true;
+                    continue;
+                }
+            }
             match hunk.status.secondary {
                 DiffHunkSecondaryStatus::HasSecondaryHunk
                 | DiffHunkSecondaryStatus::SecondaryHunkAdditionPending => {
@@ -320,7 +380,7 @@ impl SoloDiffView {
         SoloDiffButtonStates {
             stage,
             unstage,
-            restore: stage || unstage,
+            restore: (stage || unstage) && self.base != SoloDiffBase::Index, // BOLT
             prev_next,
             selection,
             stage_file: stage_status.has_unstaged(),
@@ -378,7 +438,14 @@ impl Item for SoloDiffView {
     }
 
     fn tab_content_text(&self, _detail: usize, cx: &App) -> SharedString {
-        self.buffer
+        // BOLT: VS Code's diff titles (`getTitle` in `extensions/git/src/repository.ts`).
+        let suffix = match self.base {
+            SoloDiffBase::Head => "",
+            SoloDiffBase::WorkingTree => " (Working Tree)",
+            SoloDiffBase::Index => " (Index)",
+        };
+        let name = self
+            .buffer
             .read(cx)
             .file()
             .and_then(|file| {
@@ -394,8 +461,8 @@ impl Item for SoloDiffView {
                     .as_ref()
                     .display(PathStyle::local())
                     .into_owned()
-            })
-            .into()
+            });
+        format!("{name}{suffix}").into()
     }
 
     fn tab_tooltip_text(&self, cx: &App) -> Option<SharedString> {

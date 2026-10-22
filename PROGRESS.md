@@ -344,8 +344,9 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/project/src/lsp_command.rs`, `crates/project/src/project.rs` | `GetHover::response_from_lsp` calls `bolt_typescript_hover::expand`; `mod bolt_typescript_hover` | TypeScript hover expanded |
 | `crates/settings_content/src/project.rs`, `crates/project/src/project_settings.rs`, `assets/settings/default.json` | `global_lsp_settings.expand_typescript_hovers` (default true) | TypeScript hover toggle |
 | `crates/project/src/git_store/job_debug_queue.rs` | `GitJobDebugQueue::running()` | SCM progress bar (VS Code `ProgressManager`) |
-| `crates/project/src/git_store.rs` (scm 3) | `send_keyed_job` emits `JobsUpdated` again (upstream bug: nothing emitted it); `Repository::bolt_stage_tracked` (save dirty buffers + fresh `git status` + stage, in the job queue); `Repository::bolt_checkout_target` (field `bolt_checkout`, set by `change_branch` / `create_branch`, cleared by the scan after the checkout) | stale "git switch" in the footer; Commit Tracked like VS Code `commit --all`; footer checkout spinner |
+| `crates/project/src/git_store.rs` (scm 3) | `send_keyed_job` emits `JobsUpdated` again (upstream bug: nothing emitted it); `Repository::bolt_stage_all` (save dirty buffers + fresh `git status` + stage everything incl. untracked = `git add -A`, in the job queue); `Repository::bolt_checkout_target` (field `bolt_checkout`, set by `change_branch` / `create_branch`, cleared by the scan after the checkout) | stale "git switch" in the footer; smart commit like VS Code `git add -A`; footer checkout spinner |
 | `crates/title_bar/src/title_bar.rs` (scm 3) | notify on `GitStoreEvent::JobsUpdated`; branch button shows target + spinner, disabled, while `git switch` runs | VS Code `CheckoutStatusBar` |
+| `crates/git_ui/src/solo_diff_view.rs` | `SoloDiffBase` (Head / WorkingTree / Index) + field `base`; `bolt_open_or_focus` (`open_or_focus` delegates with `Head`); diff opened per base (`open_uncommitted_diff` / `open_unstaged_diff` / `open_staged_diff` + index buffer); stage / unstage / restore buttons per base; tab title suffix " (Working Tree)" / " (Index)" | VS Code SCM diffs: Changes = Index ↔ Working Tree, Staged = HEAD ↔ Index |
 
 Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_icon_themes/material_icon_theme/`,
 `script/bolt-update-icons`, `crates/title_bar/src/bolt_project_status.rs` (mirrors the project-items block of `TitleBar::render`: re-check on syncs), `notes/minimal-strip-map.md`, `.bolt-zed-version`, `CLAUDE.local.md`, `PROGRESS.md`, `HANDOVER.md`, `notes/`.
@@ -423,3 +424,14 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   `git commit --all`); staging expands Staged. Footer flicker (old branch back between the end of `git switch` and the
   next scan) → target kept until that scan. PMS `post-checkout` hook disabled on request (`.git/hooks/post-checkout.disabled`).
   Verified by the user.
+- 2026-10-22: 🚧 Commit with nothing staged still left files out: Bolt staged tracked files only (`git add -u`), while
+  VS Code's smart commit with its defaults (`smartCommitChanges: all`, `untrackedChanges: mixed`, `commands.ts` /
+  `repository.ts` `commit`) runs `git add -A`. Now `bolt_stage_all` stages untracked files too; button "Commit Tracked"
+  → "Commit"; "no changes" prompt counts untracked files.
+- 2026-10-22: 🚧 Staging always re-expanded a collapsed Staged section (2026-10-19 request, now reverted on request).
+  Like VS Code (`scmViewPane.ts`): an empty group is only hidden (`SCMTreeFilter`), keeping its collapse state; the
+  groups are removed, and come back expanded, only when there are no changes at all (`hasSomeChanges`).
+- 2026-10-22: 🚧 SCM diffs were always HEAD ↔ working (staged edits stayed visible). Like VS Code (`getLeftResource` /
+  `getRightResource` / `getTitle` in `extensions/git/src/repository.ts`): a file under Changes opens Index ↔ Working
+  Tree ("(Working Tree)", hunks stageable / restorable), under Staged HEAD ↔ Index ("(Index)", read-only, unstageable),
+  as separate tabs. Uses Zed's existing unstaged / staged `BufferDiff`s.

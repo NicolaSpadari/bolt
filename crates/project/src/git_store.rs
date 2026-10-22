@@ -10252,10 +10252,10 @@ impl Repository {
         }
     }
 
-    // BOLT: VS Code's smart commit (`git commit --all`) for the source control panel. The tracked changes are read
-    // by a `git status` run in the job queue, after saving the repository's dirty buffers: the cached snapshot
-    // misses files saved since the last scan (e.g. autosave on focus change when clicking Commit).
-    pub fn bolt_stage_tracked(&mut self, cx: &mut Context<Self>) -> Task<Result<()>> {
+    // BOLT: VS Code's smart commit (`git add -A`, untracked files included) for the source control panel. The changes
+    // are read by a `git status` run in the job queue, after saving the repository's dirty buffers: the cached snapshot
+    // misses files saved or created since the last scan (e.g. autosave on focus change when clicking Commit).
+    pub fn bolt_stage_all(&mut self, cx: &mut Context<Self>) -> Task<Result<()>> {
         let dirty_paths = self
             .buffer_store(cx)
             .map(|buffer_store| {
@@ -10281,7 +10281,7 @@ impl Repository {
             this.update(cx, |this, _| {
                 this.send_job(
                     "stage_or_unstage_entries",
-                    Some("git add -u".into()),
+                    Some("git add -A".into()),
                     |state, _| async move {
                         let RepositoryState::Local(LocalRepositoryState {
                             backend,
@@ -10295,21 +10295,20 @@ impl Repository {
                             RelPath::new(".".as_ref(), PathStyle::local())?.as_ref(),
                         );
                         let status = backend.status(&[root]).await?;
-                        let tracked_changes = status
+                        let changes = status
                             .entries
                             .iter()
                             .filter(|(_, status)| {
-                                !status.is_untracked()
-                                    && !status.is_ignored()
+                                !status.is_ignored()
                                     && !status.is_conflicted()
                                     && status.staging().has_unstaged()
                             })
                             .map(|(repo_path, _)| repo_path.clone())
                             .collect::<Vec<_>>();
-                        if tracked_changes.is_empty() {
+                        if changes.is_empty() {
                             return Ok(());
                         }
-                        backend.stage_paths(tracked_changes, environment).await
+                        backend.stage_paths(changes, environment).await
                     },
                 )
             })?
