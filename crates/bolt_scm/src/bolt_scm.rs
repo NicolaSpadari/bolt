@@ -810,6 +810,7 @@ impl ScmPanel {
         &mut self,
         section_ix: usize,
         entry_ix: usize,
+        allow_preview: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -830,14 +831,14 @@ impl ScmPanel {
         };
         if kind == SectionKind::Merge {
             // Zed's conflict actions (Accept Current / Incoming / Both) only exist in the plain file editor.
-            self.open_file(&entry, window, cx);
+            self.open_file(&entry, allow_preview, window, cx);
             cx.notify();
             return;
         }
         if entry.status.is_deleted() || entry.status.is_untracked() {
             // Nothing to diff against on one side: open the file itself when it exists.
             if !entry.status.is_deleted() {
-                self.open_file(&entry, window, cx);
+                self.open_file(&entry, allow_preview, window, cx);
             }
             cx.notify();
             return;
@@ -852,6 +853,7 @@ impl ScmPanel {
         SoloDiffView::bolt_open_or_focus(
             GitStatusEntry::bolt_new(entry.repo_path, entry.status),
             base,
+            allow_preview,
             repository,
             self.workspace.clone(),
             window,
@@ -861,7 +863,13 @@ impl ScmPanel {
         cx.notify();
     }
 
-    fn open_file(&self, entry: &Entry, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_file(
+        &self,
+        entry: &Entry,
+        allow_preview: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(repository) = &self.repository else {
             return;
         };
@@ -874,7 +882,7 @@ impl ScmPanel {
         if let Some(workspace) = self.workspace.upgrade() {
             workspace.update(cx, |workspace, cx| {
                 workspace
-                    .open_path_preview(project_path, None, true, false, true, window, cx)
+                    .open_path_preview(project_path, None, true, allow_preview, true, window, cx)
                     .detach_and_log_err(cx);
             });
         }
@@ -1930,7 +1938,7 @@ impl ScmPanel {
                         .tooltip(Tooltip::text("Open File"))
                         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
                             cx.stop_propagation();
-                            this.open_file(&open_entry, window, cx)
+                            this.open_file(&open_entry, false, window, cx)
                         })),
                 )
             })
@@ -2019,8 +2027,10 @@ impl ScmPanel {
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 this.set_hovered_row(Row::Entry(section_ix, entry_ix), *hovered, cx)
             }))
-            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                this.open_diff(section_ix, entry_ix, window, cx)
+            .on_click(cx.listener(move |this, event: &ClickEvent, window, cx| {
+                // VS Code: single click opens a preview tab, double click keeps it open.
+                let allow_preview = event.click_count() < 2;
+                this.open_diff(section_ix, entry_ix, allow_preview, window, cx)
             }))
             .into_any_element()
     }

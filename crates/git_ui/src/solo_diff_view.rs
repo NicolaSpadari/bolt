@@ -67,13 +67,23 @@ impl SoloDiffView {
         window: &mut Window,
         cx: &mut App,
     ) -> Task<Result<Entity<Self>>> {
-        Self::bolt_open_or_focus(entry, SoloDiffBase::Head, repository, workspace, window, cx)
+        Self::bolt_open_or_focus(
+            entry,
+            SoloDiffBase::Head,
+            false,
+            repository,
+            workspace,
+            window,
+            cx,
+        )
     }
 
-    // BOLT: `open_or_focus` with the diff base chosen by the caller (the source control panel's section).
+    // BOLT: `open_or_focus` with the diff base chosen by the caller (the source control panel's section) and,
+    // like VS Code's SCM single click, optionally as the pane's preview tab.
     pub fn bolt_open_or_focus(
         entry: GitStatusEntry,
         base: SoloDiffBase,
+        allow_preview: bool,
         repository: Entity<Repository>,
         workspace: WeakEntity<Workspace>,
         window: &mut Window,
@@ -93,6 +103,9 @@ impl SoloDiffView {
         if let Some(existing) = existing {
             workspace_entity.update(cx, |workspace, cx| {
                 workspace.activate_item(&existing, true, true, window, cx);
+                if !allow_preview && let Some(pane) = workspace.pane_for(&existing) {
+                    pane.update(cx, |pane, _| pane.unpreview_item_if_preview(existing.item_id()));
+                }
             });
             existing.focus_handle(cx).focus(window, cx);
             return Task::ready(Ok(existing));
@@ -158,7 +171,24 @@ impl SoloDiffView {
                     )
                 });
 
-                workspace.add_item_to_active_pane(Box::new(view.clone()), None, true, window, cx);
+                if allow_preview {
+                    // BOLT: same as `Pane::open_item` for files: the new preview replaces the old one in place.
+                    let pane = workspace.active_pane().clone();
+                    let destination_index = pane.update(cx, |pane, cx| {
+                        pane.replace_preview_item_id(view.entity_id(), window, cx)
+                    });
+                    workspace.add_item(
+                        pane,
+                        Box::new(view.clone()),
+                        destination_index,
+                        true,
+                        true,
+                        window,
+                        cx,
+                    );
+                } else {
+                    workspace.add_item_to_active_pane(Box::new(view.clone()), None, true, window, cx);
+                }
                 view
             })
         })
