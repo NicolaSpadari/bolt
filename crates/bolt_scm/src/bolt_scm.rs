@@ -835,11 +835,8 @@ impl ScmPanel {
             cx.notify();
             return;
         }
-        if entry.status.is_deleted() || entry.status.is_untracked() {
-            // Nothing to diff against on one side: open the file itself when it exists.
-            if !entry.status.is_deleted() {
-                self.open_file(&entry, allow_preview, window, cx);
-            }
+        if entry.status.is_untracked() {
+            self.open_file(&entry, allow_preview, window, cx);
             cx.notify();
             return;
         }

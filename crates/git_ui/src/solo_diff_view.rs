@@ -48,6 +48,7 @@ pub enum SoloDiffBase {
 
 pub struct SoloDiffView {
     base: SoloDiffBase, // BOLT
+    deleted: bool,      // BOLT
     repository: Entity<Repository>,
     repository_id: RepositoryId,
     repo_path: RepoPath,
@@ -122,6 +123,7 @@ impl SoloDiffView {
         };
 
         let project = workspace_entity.read(cx).project().clone();
+        let deleted = entry.status.is_deleted(); // BOLT
         let repo_path = entry.repo_path;
         window.spawn(cx, async move |cx| {
             let buffer = project
@@ -160,6 +162,7 @@ impl SoloDiffView {
                 let view = cx.new(|cx| {
                     Self::new(
                         base,
+                        deleted,
                         project,
                         repository,
                         repo_path,
@@ -196,6 +199,7 @@ impl SoloDiffView {
 
     fn new(
         base: SoloDiffBase,
+        deleted: bool,
         project: Entity<Project>,
         repository: Entity<Repository>,
         repo_path: RepoPath,
@@ -219,6 +223,11 @@ impl SoloDiffView {
                 cx,
             );
             editor.rhs_editor().update(cx, |editor, cx| {
+                // BOLT: a deleted file's side is the empty buffer at its path; typing there would recreate the
+                // file on save, while VS Code shows the deleted content read-only.
+                if deleted {
+                    editor.set_read_only(true);
+                }
                 editor.set_should_serialize(false, cx);
                 editor.set_allow_git_diff_scrollbar_markers(showing_full_file, cx);
                 let snapshot = editor.snapshot(window, cx);
@@ -251,6 +260,7 @@ impl SoloDiffView {
 
         Self {
             base,
+            deleted,
             repository,
             repository_id,
             repo_path,
@@ -470,6 +480,7 @@ impl Item for SoloDiffView {
     fn tab_content_text(&self, _detail: usize, cx: &App) -> SharedString {
         // BOLT: VS Code's diff titles (`getTitle` in `extensions/git/src/repository.ts`).
         let suffix = match self.base {
+            _ if self.deleted => " (Deleted)",
             SoloDiffBase::Head => "",
             SoloDiffBase::WorkingTree => " (Working Tree)",
             SoloDiffBase::Index => " (Index)",
