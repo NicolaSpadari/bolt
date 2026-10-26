@@ -1628,24 +1628,25 @@ impl ScmPanel {
                             .child(EditorElement::new(editor, commit_input_style(cx)))
                     }))
                     // Drawn here rather than with the editor's placeholder, which is clipped instead of truncated.
+                    // Same text style and padding as the editor, so it lines up with the cursor: a Label sizes in
+                    // UI rems and UI line height, which drift from the buffer font metrics.
                     .when(message_empty, |this| {
+                        let text_style = commit_input_style(cx).text;
                         this.child(
                             div()
                                 .absolute()
                                 .inset_0()
                                 .px_1p5()
-                                .flex()
-                                .items_center()
+                                .py_1()
                                 .child(
-                                    Label::new(self.placeholder(cx))
-                                        .buffer_font(cx)
-                                        .size(LabelSize::Custom(rems_from_px(
-                                            ThemeSettings::get_global(cx)
-                                                .git_commit_buffer_font_size(cx)
-                                                .as_f32(),
-                                        )))
-                                        .color(Color::Placeholder)
-                                        .truncate(),
+                                    div()
+                                        .font_family(text_style.font_family)
+                                        .text_size(text_style.font_size)
+                                        .line_height(text_style.line_height)
+                                        .font_weight(text_style.font_weight)
+                                        .text_color(Color::Placeholder.color(cx))
+                                        .truncate()
+                                        .child(self.placeholder(cx)),
                                 ),
                         )
                     }),
