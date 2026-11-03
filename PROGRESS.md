@@ -40,7 +40,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
 
 - Keep: Zed extensions (unchanged, zed.dev registry), terminal. Drop: remote dev (SSH/WSL/containers), debugger,
   REPL/Jupyter, vim/helix modes.
-- Base: Zed **v1.23.3**. Hosting: private repo `NicolaSpadari/bolt` on the **personal** GitHub account; repo-local git
+- Base: Zed **v1.26.2** (`.bolt-zed-version`). Hosting: private repo `NicolaSpadari/bolt` on the **personal** GitHub account; repo-local git
   identity `Nicola Spadari <spadari.nicola@gmail.com>` (never the work account/email).
 - Default theme: user's custom **One Dark Pro Cursor** (dark mode), bundled as Bolt's default. No third-party credit
   for it (origin unknown, user's own work).
@@ -435,3 +435,11 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   `getRightResource` / `getTitle` in `extensions/git/src/repository.ts`): a file under Changes opens Index ↔ Working
   Tree ("(Working Tree)", hunks stageable / restorable), under Staged HEAD ↔ Index ("(Index)", read-only, unstageable),
   as separate tabs. Uses Zed's existing unstaged / staged `BufferDiff`s.
+- 2026-11-03: upstream sync, Zed v1.24.2 → v1.26.2 (191 upstream commits, 445 files), on `sync/v1.26.2` (rollback tag
+  `bolt-pre-v1.26.2`). `bolt-sync` fetch failed: upstream moves the `nightly` / `collab-staging` tags → `--force`.
+  7 conflicts: 4 in files Bolt doesn't touch (`edit_prediction{,_ui}`, `markdown`, `node_runtime`: release-branch
+  cherry-picks; took upstream, now automatic in `bolt-sync`), `crates/zed/Cargo.toml` (version), `project_panel.rs`
+  (upstream `entry_icons()`: Bolt's nesting chevron applied on top), `ui/icon.rs` (render refactor: `EmbeddedImage`
+  arm re-added). API drift: `ThemeRegistry::load_icon_theme(path, root, bytes)` in `load_bundled_icon_themes`,
+  `checkout_files(Option<&str>)` and the new `GitStatus::RevertedUnstaged` in `bolt_scm`. Checks: debug build, clippy
+  (release, deny warnings), zed tests build, all-features check, touch points listed, no BOLT markers lost.

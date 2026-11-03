@@ -28,6 +28,9 @@ Goal: update the Zed base every few weeks without losing Bolt changes, with low 
    - `Cargo.toml` (explicit `members` list, ~270 lines): keep upstream version, re-add the `crates/bolt_*` lines.
    - `Cargo.lock`: take upstream (`git checkout --theirs Cargo.lock`), then `cargo build` re-adds Bolt entries.
    - `rust-toolchain.toml`: always take upstream (rustup follows automatically).
+   - Files Bolt doesn't change (no diff between the old base tag and `bolt`): take upstream. Stable tags sit on
+     release branches whose cherry-picks conflict with the next release's versions of the same commits.
+   - These recipes are applied by `script/bolt-sync`.
 
 ## Procedure (scripted: `script/bolt-sync`, `--help` for the steps)
 ```

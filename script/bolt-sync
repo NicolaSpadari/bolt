@@ -139,6 +139,15 @@ start() {
             echo "Took upstream $file"
         fi
     done
+    # Stable tags live on release branches (cherry-picks), so files Bolt never touched can still conflict.
+    while IFS= read -r file; do
+        [[ -z "$file" ]] && continue
+        if git diff --quiet "$old_tag" "bolt-pre-$new_tag" -- "$file"; then
+            git checkout --theirs -- "$file"
+            git add -- "$file"
+            echo "Took upstream $file (unchanged by Bolt)"
+        fi
+    done <<< "$conflicted"
 
     conflicted="$(git diff --name-only --diff-filter=U)"
     if [[ -z "$conflicted" ]]; then
