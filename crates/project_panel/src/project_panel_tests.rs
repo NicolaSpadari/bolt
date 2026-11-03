@@ -2495,6 +2495,42 @@ async fn test_copy_and_cut_write_to_system_clipboard(cx: &mut gpui::TestAppConte
 }
 
 #[gpui::test]
+async fn test_open_svg_preview_for_single_file_worktree(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(
+        path!("/root"),
+        json!({
+            "icon.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+        }),
+    )
+    .await;
+
+    let project = Project::test(fs.clone(), [path!("/root/icon.svg").as_ref()], cx).await;
+    let window = cx.add_window(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
+    let workspace = window
+        .read_with(cx, |mw, _| mw.workspace().clone())
+        .unwrap();
+    let cx = &mut VisualTestContext::from_window(window.into(), cx);
+    let panel = workspace.update_in(cx, ProjectPanel::new);
+    cx.run_until_parked();
+
+    select_path(&panel, "icon.svg", cx);
+    panel.update_in(cx, |panel, window, cx| {
+        panel.open_svg_preview(&OpenSvgPreview, window, cx);
+    });
+    cx.run_until_parked();
+
+    workspace.update(cx, |workspace, cx| {
+        assert!(
+            workspace.active_item_as::<SvgPreviewView>(cx).is_some(),
+            "a file opened as its own worktree should open an SVG preview"
+        );
+    });
+}
+
+#[gpui::test]
 async fn test_remove_opened_file(cx: &mut gpui::TestAppContext) {
     init_test_with_editor(cx);
 
@@ -11579,6 +11615,57 @@ async fn test_sort_mode_mixed(cx: &mut gpui::TestAppContext) {
             "      Banana.rs",
             "    > carrot",
             "      Zebra.txt",
+        ]
+    );
+}
+
+#[gpui::test]
+async fn test_sort_order_extension(cx: &mut gpui::TestAppContext) {
+    init_test(cx);
+
+    let fs = FakeFs::new(cx.executor());
+    fs.insert_tree(
+        "/root",
+        json!({
+            "zebra.rs": "",
+            "carrot": {},
+            "banana.py": "",
+            "Makefile": "",
+            "apple.RS": "",
+            "aardvark.py": "",
+        }),
+    )
+    .await;
+
+    let project = Project::test(fs.clone(), ["/root".as_ref()], cx).await;
+    let window = cx.add_window(|window, cx| MultiWorkspace::test_new(project.clone(), window, cx));
+    let workspace = window
+        .read_with(cx, |mw, _| mw.workspace().clone())
+        .unwrap();
+    let cx = &mut VisualTestContext::from_window(window.into(), cx);
+
+    cx.update(|_, cx| {
+        cx.update_global::<SettingsStore, _>(|store, cx| {
+            store.update_user_settings(cx, |settings| {
+                settings.project_panel.get_or_insert_default().sort_order =
+                    Some(settings::ProjectPanelSortOrder::Extension);
+            });
+        });
+    });
+
+    let panel = workspace.update_in(cx, ProjectPanel::new);
+    cx.run_until_parked();
+
+    assert_eq!(
+        visible_entries_as_strings(&panel, 0..50, cx),
+        &[
+            "v root",
+            "    > carrot",
+            "      Makefile",
+            "      aardvark.py",
+            "      banana.py",
+            "      apple.RS",
+            "      zebra.rs",
         ]
     );
 }

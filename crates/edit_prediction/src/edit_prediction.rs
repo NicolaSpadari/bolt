@@ -2796,6 +2796,16 @@ impl EditPredictionStore {
             return Task::ready(Ok(None));
         }
 
+        // Cloud rejects these requests too; skipping them avoids futile round trips.
+        if is_cloud_zeta
+            && self
+                .user_store
+                .read(cx)
+                .current_organization_has_no_active_subscription()
+        {
+            return Task::ready(Ok(None));
+        }
+
         if is_cloud_zeta && self.request_backoff_active(cx) {
             log::debug!(
                 "Skipping Zeta edit prediction request while backing off after Cloud timeout"
@@ -3346,10 +3356,14 @@ impl EditPredictionStore {
                 .edit_preview
                 .as_unified_diff(prediction.snapshot.file(), &prediction.edits);
             async move {
+                let organization_id = organization
+                    .map(|organization| organization.id.clone())
+                    .context("no organization selected")?;
+
                 client
                     .cloud_client()
                     .submit_edit_prediction_feedback(SubmitEditPredictionFeedbackBody {
-                        organization_id: organization.map(|organization| organization.id.clone()),
+                        organization_id,
                         request_id: prediction_id,
                         rating: match rating {
                             EditPredictionRating::Positive => "positive".to_string(),
