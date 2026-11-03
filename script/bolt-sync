@@ -98,7 +98,8 @@ start() {
     git config rerere.autoupdate true
 
     step "Fetching upstream tags"
-    git fetch upstream --tags --quiet
+    # --force: upstream moves `nightly` / `collab-staging`; without it the fetch is rejected ("would clobber").
+    git fetch upstream --tags --force --quiet
 
     [[ "$(git rev-parse main)" == "$(git rev-parse "$old_tag^{commit}")" ]] ||
         fail "main is not at $old_tag (.bolt-zed-version). main must be plain Zed: git branch -f main $old_tag"
