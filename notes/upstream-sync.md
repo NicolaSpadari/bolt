@@ -3,7 +3,8 @@
 Goal: update the Zed base every few weeks without losing Bolt changes, with low effort and an always-available rollback.
 
 ## Strategy (decided 2026-10-14, branch model updated 2026-10-15 by the user)
-- **Two branches.** `main` = plain Zed: only fast-forwarded to Zed stable tags, never committed to. `bolt` = Bolt
+- **Two branches.** `main` = plain Zed: only moved to Zed stable tags, never committed to. Tags sit on release branches, so
+  moving `main` is not a fast-forward: its push needs `--force-with-lease` (nothing of Bolt is lost). `bolt` = Bolt
   (GitHub default branch). `git diff main..bolt` = everything Bolt changes.
 - **Merge, not rebase, and never cherry-pick upstream.** Each sync is one merge commit `Merge Zed vX.Y.Z into Bolt`
   on `bolt`; the whole release comes in (unwanted subsystems stay off via Cargo features / settings). Conflicts are
@@ -36,7 +37,7 @@ Goal: update the Zed base every few weeks without losing Bolt changes, with low 
 ```
 git fetch upstream --tags
 NEW=v1.24.0                                   # latest stable tag, no -pre
-git switch main && git merge --ff-only $NEW   # main = plain Zed
+git branch -f main $NEW                     # main = plain Zed (not a fast-forward: release branches)
 git tag bolt-pre-$NEW bolt                    # rollback point
 git switch -c sync/$NEW bolt
 git merge --no-ff main -m "Merge Zed $NEW into Bolt"
@@ -46,7 +47,7 @@ cargo check -p zed --features ai,collab,repl,debugger
 #   manual smoke run with stderr captured; re-check notes/rebrand-map.md for new "Zed" strings
 echo $NEW > .bolt-zed-version
 git switch bolt && git merge --ff-only sync/$NEW && git branch -d sync/$NEW
-git push origin main bolt --tags
+git push origin bolt bolt-pre-$NEW && git push --force-with-lease origin main
 ```
 Then log the sync in PROGRESS (from → to, conflicts hit, time spent).
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # BOLT: merges a Zed stable release into Bolt, following notes/upstream-sync.md.
-# `main` = plain Zed (only fast-forwarded to stable tags), `bolt` = Bolt. The merge happens on `sync/<tag>`; `bolt`
+# `main` = plain Zed (only moved to stable tags), `bolt` = Bolt. The merge happens on `sync/<tag>`; `bolt`
 # moves only at --finish, after the checks pass. `bolt-pre-<tag>` is the rollback point.
 #
 # Usage:
-#   script/bolt-sync [vX.Y.Z]   start: fetch, fast-forward main, tag, merge on sync/<tag> (default: latest stable tag)
+#   script/bolt-sync [vX.Y.Z]   start: fetch, move main to the tag, tag, merge on sync/<tag> (default: latest stable tag)
 #   script/bolt-sync --continue after resolving conflicts: commit the merge, bump .bolt-zed-version, run the checks
 #   script/bolt-sync --finish   fast-forward bolt to sync/<tag>, delete the branch, print the push command
 #   script/bolt-sync --abort    undo a sync in progress (merge, sync branch, rollback tag, main)
@@ -116,7 +116,7 @@ start() {
 
     echo "Zed $old_tag → $new_tag ($(git rev-list --count "$old_tag..$new_tag") upstream commits)"
 
-    step "Fast-forwarding main to $new_tag"
+    step "Moving main to $new_tag"
     git branch -f main "$new_tag"
 
     step "Tagging the rollback point bolt-pre-$new_tag"
@@ -205,7 +205,7 @@ finish() {
     git merge --ff-only --quiet "sync/$new_tag"
     git branch -d "sync/$new_tag"
     echo "bolt is on Zed $new_tag. Publish with:"
-    echo "  git push origin main bolt bolt-pre-$new_tag"
+    echo "  git push origin bolt bolt-pre-$new_tag && git push --force-with-lease origin main"
 }
 
 abort() {
