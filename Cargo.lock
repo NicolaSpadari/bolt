@@ -2370,6 +2370,69 @@ dependencies = [
 ]
 
 [[package]]
+name = "bolt_iconify"
+version = "0.1.0"
+dependencies = [
+ "collections",
+ "editor",
+ "gpui",
+ "log",
+ "multi_buffer",
+ "project",
+ "regex",
+ "serde_json",
+ "settings",
+ "theme",
+ "theme_settings",
+ "ui",
+]
+
+[[package]]
+name = "bolt_scm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "askpass",
+ "editor",
+ "file_icons",
+ "git",
+ "git_ui",
+ "git_ui_core",
+ "gpui",
+ "log",
+ "menu",
+ "notifications",
+ "picker",
+ "project",
+ "settings",
+ "theme",
+ "theme_settings",
+ "ui",
+ "util",
+ "workspace",
+ "zed_actions",
+]
+
+[[package]]
+name = "bolt_search_panel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "collections",
+ "editor",
+ "file_icons",
+ "futures 0.3.34",
+ "gpui",
+ "language",
+ "menu",
+ "project",
+ "theme",
+ "ui",
+ "util",
+ "workspace",
+]
+
+[[package]]
 name = "bon"
 version = "3.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -18512,6 +18575,7 @@ dependencies = [
  "anyhow",
  "arrayvec",
  "auto_update",
+ "bolt_scm",
  "call",
  "channel",
  "chrono",
@@ -22575,6 +22639,9 @@ dependencies = [
  "audio",
  "auto_update",
  "auto_update_ui",
+ "bolt_iconify",
+ "bolt_scm",
+ "bolt_search_panel",
  "breadcrumbs",
  "call",
  "call_hierarchy",
@@ -22588,6 +22655,7 @@ dependencies = [
  "collab_ui",
  "collections",
  "command_palette",
+ "command_palette_hooks",
  "component_preview",
  "copilot",
  "copilot_chat",

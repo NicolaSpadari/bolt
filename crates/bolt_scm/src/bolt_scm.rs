@@ -591,6 +591,7 @@ impl ScmPanel {
                         GitStatus::Staged => (in_staged, in_changes) = (true, false),
                         GitStatus::Unstaged => (in_staged, in_changes) = (false, true),
                         GitStatus::Reverted => (in_staged, in_changes) = (false, false),
+                        GitStatus::RevertedUnstaged => in_changes = false,
                         GitStatus::Unchanged => {}
                     }
                 }
@@ -777,7 +778,7 @@ impl ScmPanel {
                         tracked.into_iter().map(|entry| entry.repo_path).collect();
                     repository
                         .update(cx, |repository, cx| {
-                            repository.checkout_files("HEAD", paths, cx)
+                            repository.checkout_files(Some("HEAD"), paths, cx)
                         })
                         .await?;
                 }

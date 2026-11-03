@@ -257,18 +257,13 @@ pub fn load_bundled_icon_themes(registry: &ThemeRegistry) {
         let Some(bytes) = registry.assets().load(&path).log_err().flatten() else {
             continue;
         };
-        let Some(icon_theme_family) = theme::deserialize_icon_theme(&bytes)
-            .with_context(|| format!("failed to parse icon theme at path \"{path}\""))
-            .log_err()
-        else {
-            continue;
-        };
-        let path: &str = &path;
-        let Some(icons_root_dir) = std::path::Path::new(path).parent() else {
+        let path = std::path::Path::new(path.as_ref());
+        let Some(icons_root_dir) = path.parent() else {
             continue;
         };
         registry
-            .load_icon_theme(icon_theme_family, icons_root_dir)
+            .load_icon_theme(path, icons_root_dir, bytes.into_owned())
+            .with_context(|| format!("failed to load icon theme at path {path:?}"))
             .log_err();
     }
 }
