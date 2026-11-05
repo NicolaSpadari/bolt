@@ -3,7 +3,7 @@
 ### Project
 Bolt — /Users/administrator/Projects/bolt
 Branch: `bolt` (all Bolt work, GitHub default); `main` = plain Zed (stable tags only) | Remote: `origin` = github.com/NicolaSpadari/bolt (private), `upstream` = zed
-Framework: Rust + GPUI (Zed fork, base **v1.26.2**, see `.bolt-zed-version`) | Runtime: macOS arm64, Xcode 26.2
+Framework: Rust + GPUI (Zed fork, base **v1.27.0**, see `.bolt-zed-version`) | Runtime: macOS arm64, Xcode 26.2
 
 ### Session Summary (2026-10-13 → 2026-10-15)
 - Decisions (PROGRESS "Decisions"): upstream sync by merging Zed stable tags (`notes/upstream-sync.md`), bundle ID

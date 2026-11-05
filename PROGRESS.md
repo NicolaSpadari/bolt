@@ -40,7 +40,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
 
 - Keep: Zed extensions (unchanged, zed.dev registry), terminal. Drop: remote dev (SSH/WSL/containers), debugger,
   REPL/Jupyter, vim/helix modes.
-- Base: Zed **v1.26.2** (`.bolt-zed-version`). Hosting: private repo `NicolaSpadari/bolt` on the **personal** GitHub account; repo-local git
+- Base: Zed **v1.27.0** (`.bolt-zed-version`). Hosting: private repo `NicolaSpadari/bolt` on the **personal** GitHub account; repo-local git
   identity `Nicola Spadari <spadari.nicola@gmail.com>` (never the work account/email).
 - Default theme: user's custom **One Dark Pro Cursor** (dark mode), bundled as Bolt's default. No third-party credit
   for it (origin unknown, user's own work).
@@ -451,3 +451,9 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
 - 2026-11-05: `bolt_i18n` (translated labels in place of i18n keys, x18n in-place rules, intool label sources;
   spec `notes/bolt-i18n.md`); iconify folds no longer persisted in the path-based fold DB (stale "⋯" cleaned up);
   SCM commit placeholder offset by the editor content margin.
+- 2026-11-05: upstream sync, Zed v1.26.2 → v1.27.0 (117 upstream commits, 347 files), on `sync/v1.27.0` (rollback tag
+  `bolt-pre-v1.27.0`). Conflicts: `Cargo.lock`, `gpui_macos/src/platform.rs` (taken upstream by `bolt-sync`),
+  `crates/zed/Cargo.toml` (version only). API drift: `KeyContext::new_with_defaults(os)` in `bolt_scm` /
+  `bolt_search_panel`, `TitleBar::get_repository_for_worktree` / `visible_worktrees_in_repository` take a `PathStyle`
+  (`bolt_project_status`). Checks: build, clippy, zed tests build, all-features check, touch points, markers, smoke run
+  (first frame, no errors). No new visible "Zed" strings.
