@@ -62,7 +62,7 @@ Framework: Rust + GPUI (Zed fork, base **v1.26.2**, see `.bolt-zed-version`) | R
 - `cargo build` dev ~10 min cold / seconds incremental; release from scratch ~30–40 min (thin LTO).
 - Debug-only items (e.g. `zed_actions::wsl_actions`) break release builds: check `#[cfg(debug_assertions)]`.
 - Bolt crates/files: `crates/bolt_search_panel`, `crates/bolt_scm`, `crates/project_panel/src/bolt_nesting*`,
-  `crates/title_bar/src/bolt_project_status.rs`, `crates/bolt_iconify`, `script/bolt-*`, `assets/icons/bolt/`,
+  `crates/title_bar/src/bolt_project_status.rs`, `crates/bolt_iconify`, `crates/bolt_i18n`, `script/bolt-*`, `assets/icons/bolt/`,
   `assets/icons/bundled_icon_themes/`, `assets/themes/one_dark_pro_cursor/`.
 - User preferences: Italian, concise; simplest approach; one feature at a time, verified with a build.
 - VS Code parity: read the VS Code source first (`microsoft/vscode/extensions/git/src/*.ts` for git) and replicate the

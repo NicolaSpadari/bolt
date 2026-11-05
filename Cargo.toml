@@ -164,6 +164,7 @@ members = [
     "crates/bolt_search_panel",
     "crates/bolt_scm",
     "crates/bolt_iconify",
+    "crates/bolt_i18n",
     "crates/path",
     "crates/paths",
     "crates/picker",
@@ -440,6 +441,7 @@ outline_panel = { path = "crates/outline_panel" }
 bolt_search_panel = { path = "crates/bolt_search_panel" }
 bolt_scm = { path = "crates/bolt_scm" }
 bolt_iconify = { path = "crates/bolt_iconify" }
+bolt_i18n = { path = "crates/bolt_i18n" }
 path = { path = "crates/path" }
 paths = { path = "crates/paths" }
 perf = { path = "tooling/perf", default-features = false }

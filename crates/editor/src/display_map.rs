@@ -169,6 +169,8 @@ pub enum HighlightKey {
     // below is sorted lexicographically, as there is no relevant ordering for these aside from coming after the above
     // BOLT: dimmed Iconify icon names on the cursor row.
     BoltIconify,
+    // BOLT: i18n keys without a translation.
+    BoltI18nMissing,
     BufferSearchHighlights,
     ConsoleAnsiHighlight(usize),
     DebugStackFrameLine,

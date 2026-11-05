@@ -2370,6 +2370,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "bolt_i18n"
+version = "0.1.0"
+dependencies = [
+ "collections",
+ "editor",
+ "gpui",
+ "log",
+ "multi_buffer",
+ "project",
+ "regex",
+ "serde_json",
+ "settings",
+ "theme",
+ "theme_settings",
+ "ui",
+]
+
+[[package]]
 name = "bolt_iconify"
 version = "0.1.0"
 dependencies = [
@@ -22639,6 +22657,7 @@ dependencies = [
  "audio",
  "auto_update",
  "auto_update_ui",
+ "bolt_i18n",
  "bolt_iconify",
  "bolt_scm",
  "bolt_search_panel",

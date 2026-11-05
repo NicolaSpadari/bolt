@@ -163,7 +163,9 @@ file is upstream's hottest (46 commits / 3 months).
     `origin/main` tracked `origin/main`, so Sync pushed it to `main` (blocked by GitHub rules on cb-frontend).
     Branch popover (footer): "Create From…" button in the tab bar.
   - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
-    the panel as a truncated `Label` (ellipsis).
+    the panel as a truncated `Label` (ellipsis). It is offset by the editor's content margin (font descent,
+    `offset_content`), otherwise the cursor is drawn over the first glyph. It is offset by the editor's content margin (font descent,
+    `offset_content`), otherwise the cursor is drawn over the first glyph.
 - ✅ Terminal panel "+" opens a new terminal directly (no New Terminal / Spawn Task menu) (user request 2026-10-15).
 - ✅ Rebrand pass (2026-10-15, map in `notes/rebrand-map.md`): Bolt logo (`VectorName::BoltLogo`,
   `assets/images/bolt_logo.svg` = app icon glyph) and "Welcome to Bolt" on the welcome page / onboarding; "About Bolt",
@@ -324,12 +326,15 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `crates/settings_content/src/editor.rs`, `crates/settings/src/vscode_import.rs`, `assets/settings/default.json` | `iconify` setting (default true) | `bolt_iconify` |
 | `crates/editor/src/inlays.rs`, `crates/editor/src/display_map/inlay_map.rs` | `InlayContent::Image` + `Inlay::image` (rendered like color inlays) | Iconify icon before the name on the cursor row |
 | `crates/editor/src/display_map.rs` | `HighlightKey::BoltIconify` | dimmed icon names |
-| `crates/editor/src/fold.rs` | type-tagged (code-created) folds are not persisted | Iconify folds came back as "⋯" |
+| `crates/editor/src/fold.rs` | type-tagged (code-created) folds are not persisted (restoration data and path-based DB folds) | Iconify folds came back as "⋯" |
 | `crates/editor/src/blink_manager.rs`, `crates/editor/src/editor.rs`, `crates/editor/src/element.rs` | 200 ms cursor fade on blink (off with Reduce Motion) | VS Code smooth caret blinking |
 | `crates/project_panel/src/project_panel.rs` (indent guides) | nested files add one level to the guides too | file nesting tree lines |
 | `assets/settings/default.json` (UI) | `ui_font_family: .SystemUIFont`; `project_panel.folder_indicator: both`, `hide_root: true` | like VS Code/Cursor |
 | `crates/install_cli/src/install_cli_binary.rs`, `crates/cli/src/main.rs` | CLI installed as `/usr/local/bin/bolt` (never replaces Zed's `zed`), clap name `bolt` | `bolt ./folder` |
 | `crates/zed/src/main.rs`, `Cargo.toml`, `crates/zed/Cargo.toml` | `bolt_iconify` crate wiring | Iconify |
+| `crates/settings_content/src/project.rs`, `crates/settings/src/vscode_import.rs`, `assets/settings/default.json` | `i18n` setting (`I18nSettingsContent`: enabled, locale, paths, functions, max_length), user or project | `bolt_i18n` |
+| `crates/editor/src/display_map.rs` | `HighlightKey::BoltI18nMissing` | i18n keys without a translation |
+| `crates/zed/src/main.rs`, `Cargo.toml`, `crates/zed/Cargo.toml` | `bolt_i18n` crate wiring | i18n labels |
 | `crates/project/src/git_store.rs` (merge) | `compute_snapshot` also emits `StatusesChanged` when only the merge message changes | merge message prefill raced with `git merge` |
 | `crates/settings_content/src/extension.rs` | `ExtensionSettingsContent`: `Default` derived instead of the manual impl | clippy `derivable_impls` after `suggest_extensions` became `Option` |
 | `crates/git_ui/src/git_ui.rs` | `pub fn bolt_panel_enabled` | read the switch from bolt_scm |
@@ -443,3 +448,6 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   arm re-added). API drift: `ThemeRegistry::load_icon_theme(path, root, bytes)` in `load_bundled_icon_themes`,
   `checkout_files(Option<&str>)` and the new `GitStatus::RevertedUnstaged` in `bolt_scm`. Checks: debug build, clippy
   (release, deny warnings), zed tests build, all-features check, touch points listed, no BOLT markers lost.
+- 2026-11-05: `bolt_i18n` (translated labels in place of i18n keys, x18n in-place rules, intool label sources;
+  spec `notes/bolt-i18n.md`); iconify folds no longer persisted in the path-based fold DB (stale "⋯" cleaned up);
+  SCM commit placeholder offset by the editor content margin.

@@ -85,15 +85,45 @@ pub struct ProjectSettingsContent {
     ///
     /// Default: false
     pub disable_ai: Option<SaturatingBool>,
+
+    /// BOLT: translated labels shown in place of i18n keys (`t("main.title")`), like x18n for VS Code.
+    pub i18n: Option<I18nSettingsContent>,
 }
 
 crate::fallible_options::flattened_deserialize!(ProjectSettingsContent {
     sections: { all_languages, worktree },
     options: {
-        terminal, context_server_timeout, load_direnv, git_hosting_providers, disable_ai,
+        terminal, context_server_timeout, load_direnv, git_hosting_providers, disable_ai, i18n,
     },
     defaults: { lsp, dap, context_servers },
 });
+
+/// BOLT: settings of `bolt_i18n`.
+#[with_fallible_options]
+#[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom)]
+pub struct I18nSettingsContent {
+    /// Whether i18n keys are replaced by their translation.
+    ///
+    /// Default: true
+    pub enabled: Option<bool>,
+    /// Locale whose translations are shown.
+    ///
+    /// Default: "en"
+    pub locale: Option<String>,
+    /// Absolute paths of translation directories outside the project (e.g. a backend's `resources/lang`),
+    /// searched after the project's own.
+    ///
+    /// Default: []
+    pub paths: Option<Vec<String>>,
+    /// Translate functions to scan besides the vue-i18n and Laravel ones (e.g. `$lang`).
+    ///
+    /// Default: []
+    pub functions: Option<Vec<String>>,
+    /// Longest translation shown in place of its key; longer ones are shown truncated after the key.
+    ///
+    /// Default: 40
+    pub max_length: Option<usize>,
+}
 
 /// When to scan content of linked directories.
 #[derive(
