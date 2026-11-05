@@ -368,11 +368,17 @@ fn find_labels(text: &str, file_path: &Path, settings: &I18nSettings) -> Vec<Fou
     }
     usages
         .into_iter()
-        .filter_map(|key_range| {
+        .filter_map(|usage| {
+            let key_range = usage.key_range;
             let key = text.get(key_range.clone())?;
             let label = match catalog.lookup(key) {
                 Lookup::Value(value) => {
-                    let value = collapse_newlines(value);
+                    let interpolation = if usage.component {
+                        component_interpolation(text, key_range.start)
+                    } else {
+                        call_interpolation(text, key_range.end)
+                    };
+                    let value = interpolate(&collapse_newlines(value), &interpolation);
                     if value.chars().count() <= settings.max_length {
                         Label::InPlace(value.into())
                     } else {
@@ -415,9 +421,15 @@ fn truncate(text: &str, max: usize) -> String {
     truncated
 }
 
-/// Byte ranges of the static keys passed to translate functions (`t('key')`, `this.$lang("key")`) and of
-/// `keypath="key"` attributes. Template literals with `${` are dynamic and skipped.
-fn find_usages(text: &str, extra_functions: &[String]) -> Vec<Range<usize>> {
+struct Usage {
+    key_range: Range<usize>,
+    /// `<i18n-t keypath="key">` rather than a call.
+    component: bool,
+}
+
+/// Static keys passed to translate functions (`t('key')`, `this.$lang("key")`) and `keypath="key"` attributes.
+/// Template literals with `${` are dynamic and skipped.
+fn find_usages(text: &str, extra_functions: &[String]) -> Vec<Usage> {
     let mut functions = DEFAULT_FUNCTIONS
         .iter()
         .map(|function| function.to_string())
@@ -444,14 +456,221 @@ fn find_usages(text: &str, extra_functions: &[String]) -> Vec<Range<usize>> {
     regex
         .captures_iter(text)
         .filter_map(|captures| {
-            captures
-                .iter()
-                .skip(1)
-                .flatten()
-                .next()
-                .map(|key| key.range())
+            if let Some(keypath) = captures.get(4) {
+                return Some(Usage {
+                    key_range: keypath.range(),
+                    component: true,
+                });
+            }
+            let key = captures.iter().skip(1).flatten().next()?;
+            Some(Usage {
+                key_range: key.range(),
+                component: false,
+            })
         })
         .collect()
+}
+
+/// Values passed to a message: placeholder name → expression, and the plural count expression.
+#[derive(Debug, Default, PartialEq)]
+struct Interpolation {
+    named: Vec<(String, String)>,
+    plural: Option<String>,
+}
+
+/// The arguments after the key of a call: `t(key, { name: expr })`, `t(key, [a, b])`, `t(key, count)`,
+/// `t(key, { … }, count)` (vue-i18n) and `__(key, ['name' => $x])`, `trans_choice(key, $n, [...])` (Laravel).
+fn call_interpolation(text: &str, key_end: usize) -> Interpolation {
+    let mut interpolation = Interpolation::default();
+    let Some(rest) = text.get(key_end..) else {
+        return interpolation;
+    };
+    // Past the key's closing quote.
+    let rest = rest.get(1..).unwrap_or_default();
+    let Some(end) = top_level_find(rest, ")") else {
+        return interpolation;
+    };
+    for argument in top_level_split(&rest[..end], ",").into_iter().skip(1) {
+        let argument = argument.trim();
+        if let Some(inner) = argument.strip_prefix('{').and_then(|inner| inner.strip_suffix('}')) {
+            for entry in top_level_split(inner, ",") {
+                let entry = entry.trim();
+                if entry.is_empty() || entry.starts_with("...") {
+                    continue;
+                }
+                match top_level_find(entry, ":") {
+                    Some(colon) => interpolation.named.push((
+                        unquote(&entry[..colon]).to_string(),
+                        entry[colon + 1..].trim().to_string(),
+                    )),
+                    None => interpolation.named.push((entry.to_string(), entry.to_string())),
+                }
+            }
+        } else if let Some(inner) = argument.strip_prefix('[').and_then(|inner| inner.strip_suffix(']')) {
+            for (index, entry) in top_level_split(inner, ",").into_iter().enumerate() {
+                let entry = entry.trim();
+                if entry.is_empty() {
+                    continue;
+                }
+                match top_level_find(entry, "=>") {
+                    Some(arrow) => interpolation.named.push((
+                        unquote(&entry[..arrow]).to_string(),
+                        entry[arrow + 2..].trim().to_string(),
+                    )),
+                    None => interpolation.named.push((index.to_string(), entry.to_string())),
+                }
+            }
+        } else if !argument.is_empty() && interpolation.plural.is_none() {
+            interpolation.plural = Some(argument.to_string());
+        }
+    }
+    interpolation
+}
+
+/// `<i18n-t keypath="key" :plural="expr">` and its `<template #name>{{ expr }}</template>` slots.
+fn component_interpolation(text: &str, keypath_start: usize) -> Interpolation {
+    static PLURAL: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?:^|\s)(?::|v-bind:)?plural="([^"]*)""#).expect("Failed to create PLURAL regex")
+    });
+    static SLOT: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(?s)<template\s+(?:#|v-slot:)([\w-]+)[^>]*>(.*?)</template>"#).expect("Failed to create SLOT regex")
+    });
+    let mut interpolation = Interpolation::default();
+    let Some(tag_start) = text[..keypath_start].rfind("<i18n-t") else {
+        return interpolation;
+    };
+    let Some(tag_end) = text[keypath_start..].find('>').map(|end| keypath_start + end) else {
+        return interpolation;
+    };
+    let tag = &text[tag_start..tag_end];
+    interpolation.plural = PLURAL
+        .captures(tag)
+        .and_then(|captures| captures.get(1))
+        .map(|plural| plural.as_str().trim().to_string());
+    let body_end = text[tag_end..]
+        .find("</i18n-t>")
+        .map_or(text.len(), |end| tag_end + end);
+    for captures in SLOT.captures_iter(&text[tag_end..body_end]) {
+        let (Some(name), Some(content)) = (captures.get(1), captures.get(2)) else {
+            continue;
+        };
+        let content = content.as_str().trim();
+        let expression = content
+            .strip_prefix("{{")
+            .and_then(|content| content.strip_suffix("}}"))
+            .map(str::trim)
+            .filter(|expression| !expression.is_empty() && !expression.contains("{{"))
+            .unwrap_or(name.as_str());
+        interpolation
+            .named
+            .push((name.as_str().to_string(), collapse_newlines(expression)));
+    }
+    interpolation
+}
+
+/// Picks the plural form (vue-i18n pipes, Laravel `{0}` / `[1,*]` prefixes) and shows each placeholder (`{name}`,
+/// Laravel `:name`) as `{expression passed for it}`. With a count that is not a number literal, the last form (the
+/// plural) is shown.
+fn interpolate(message: &str, interpolation: &Interpolation) -> String {
+    static PLACEHOLDER: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\{\s*([\w.]+)\s*\}").expect("Failed to create PLACEHOLDER regex"));
+    static COLON_PLACEHOLDER: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r":([A-Za-z_]\w*)").expect("Failed to create COLON_PLACEHOLDER regex"));
+    static LARAVEL_RANGE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^(?:\{\d+\}|\[\d+\s*,\s*(?:\d+|\*)\])\s*").expect("Failed to create LARAVEL_RANGE regex")
+    });
+    let mut message = message.to_string();
+    if let Some(count) = &interpolation.plural {
+        let forms = message.split('|').map(str::trim).collect::<Vec<_>>();
+        if forms.len() > 1 {
+            let last = forms.len() - 1;
+            let index = match count.parse::<u64>() {
+                Ok(1) if forms.len() == 2 => 0,
+                Ok(_) if forms.len() == 2 => 1,
+                Ok(count) => usize::try_from(count).unwrap_or(last).min(2).min(last),
+                Err(_) => last,
+            };
+            message = LARAVEL_RANGE.replace(forms[index], "").into_owned();
+        }
+    }
+    let expression = |name: &str| -> Option<&str> {
+        interpolation
+            .named
+            .iter()
+            .find(|(placeholder, _)| placeholder == name)
+            .map(|(_, expression)| expression.as_str())
+            .or_else(|| {
+                matches!(name, "n" | "count")
+                    .then_some(interpolation.plural.as_deref())
+                    .flatten()
+            })
+    };
+    let message = PLACEHOLDER.replace_all(&message, |captures: &regex::Captures| {
+        let whole = captures.get(0).map_or("", |whole| whole.as_str());
+        match captures.get(1).and_then(|name| expression(name.as_str())) {
+            Some(expression) => format!("{{{expression}}}"),
+            None => whole.to_string(),
+        }
+    });
+    if interpolation.named.is_empty() {
+        return message.into_owned();
+    }
+    COLON_PLACEHOLDER
+        .replace_all(&message, |captures: &regex::Captures| {
+            let whole = captures.get(0).map_or("", |whole| whole.as_str());
+            match captures.get(1).and_then(|name| expression(name.as_str())) {
+                Some(expression) => format!("{{{expression}}}"),
+                None => whole.to_string(),
+            }
+        })
+        .into_owned()
+}
+
+fn unquote(text: &str) -> &str {
+    let text = text.trim();
+    text.strip_prefix(['\'', '"'])
+        .and_then(|inner| inner.strip_suffix(['\'', '"']))
+        .unwrap_or(text)
+}
+
+/// Byte offset of the first `pattern` outside brackets and string literals, at the nesting level `text` starts at.
+fn top_level_find(text: &str, pattern: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if let Some(open) = quote {
+            if byte == b'\\' {
+                index += 1;
+            } else if byte == open {
+                quote = None;
+            }
+        } else if depth == 0 && text[index..].starts_with(pattern) {
+            return Some(index);
+        } else {
+            match byte {
+                b'\'' | b'"' | b'`' => quote = Some(byte),
+                b'(' | b'[' | b'{' => depth += 1,
+                b')' | b']' | b'}' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+        }
+        index += 1;
+    }
+    None
+}
+
+fn top_level_split<'a>(text: &'a str, separator: &str) -> Vec<&'a str> {
+    let mut parts = Vec::new();
+    let mut rest = text;
+    while let Some(index) = top_level_find(rest, separator) {
+        parts.push(&rest[..index]);
+        rest = &rest[index + separator.len()..];
+    }
+    parts.push(rest);
+    parts
 }
 
 enum Lookup<'a> {
@@ -907,8 +1126,63 @@ mod tests {
         let functions = functions.iter().map(|function| function.to_string()).collect::<Vec<_>>();
         find_usages(text, &functions)
             .into_iter()
-            .map(|range| text[range].to_string())
+            .map(|usage| text[usage.key_range].to_string())
             .collect()
+    }
+
+    fn label(text: &str, message: &str) -> String {
+        let usage = find_usages(text, &[]).into_iter().next().expect("usage");
+        let interpolation = if usage.component {
+            component_interpolation(text, usage.key_range.start)
+        } else {
+            call_interpolation(text, usage.key_range.end)
+        };
+        interpolate(message, &interpolation)
+    }
+
+    #[test]
+    fn plural_form_and_placeholders_follow_the_call() {
+        assert_eq!(label(r#"$t("main.night", nights)"#, "night | nights"), "nights");
+        assert_eq!(label(r#"$t("main.night", 1)"#, "night | nights"), "night");
+        assert_eq!(label(r#"t('main.x', 0)"#, "none | one | many"), "none");
+        assert_eq!(label(r#"t('main.x', 5)"#, "none | one | many"), "many");
+        assert_eq!(label(r#"t('main.x')"#, "night | nights"), "night | nights");
+        assert_eq!(
+            label(r#"t('main.hello', { name: user.name, count })"#, "Hi {name}, {count} new"),
+            "Hi {user.name}, {count} new"
+        );
+        assert_eq!(label(r#"t('main.list', [first, second])"#, "{0} and {1}"), "{first} and {second}");
+        assert_eq!(label(r#"t('main.n', items.length)"#, "{n} item | {n} items"), "{items.length} items");
+        assert_eq!(
+            label(r#"__('auth.throttle', ['seconds' => $seconds])"#, "Retry in :seconds seconds."),
+            "Retry in {$seconds} seconds."
+        );
+        assert_eq!(
+            label(r#"trans_choice('main.apples', $count)"#, "{0} None|[1,*] Some"),
+            "Some"
+        );
+        assert_eq!(label(r#"t('main.x', { a: f(1, 2) })"#, "{a}"), "{f(1, 2)}");
+    }
+
+    #[test]
+    fn component_slots_and_plural() {
+        let text = r#"<i18n-t
+            keypath="main.pagination.showing"
+            :plural="props.total"
+            scope="global"
+        >
+            <template #from>
+                {{ from }}
+            </template>
+            <template #to>{{ to }}</template>
+            <template #n>
+                {{ props.total }}
+            </template>
+        </i18n-t>"#;
+        assert_eq!(
+            label(text, "No results | Showing {n} result | Showing {from} to {to} of {n} results"),
+            "Showing {from} to {to} of {props.total} results"
+        );
     }
 
     #[test]

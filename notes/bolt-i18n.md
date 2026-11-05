@@ -10,6 +10,13 @@ Like x18n's VS Code in-place mode (`packages/vscode/src/model/inplace.ts`, `anno
 - Missing key: raw key in the warning color, never folded.
 - Value longer than `max_length` (x18n `annotationMaxLength`, 40): not folded; after the closing quote a hint
   ` <value truncated to max_length - 1>…` (x18n `inlayHints` + `truncate`). Newlines in values → one space.
+- Interpolation (Bolt addition, user request 2026-11-05): placeholders show the expression passed for them,
+  `{name}` → `{user.name}`, from `t(key, { name: user.name })`, `t(key, [a, b])` (`{0}`), Laravel
+  `__(key, ['name' => $x])` (`:name`) and `<i18n-t>` slots (`<template #from>{{ from }}</template>`). `{n}` / `{count}`
+  default to the plural count.
+- Plurals (`a | b | c`, Laravel `{0} …|[1,*] …`) only when a count is passed (`t(key, n)`, `:plural="…"`,
+  `trans_choice`): a number literal picks the vue-i18n form (2 forms: 1 → first; 3 forms: 0 / 1 / many), any other
+  expression shows the last (plural) form. `max_length` applies to the interpolated text. Hover shows the key only.
 - Dynamic keys (template literals with `${`) are skipped. A key that names a subtree (namespace) is neither shown nor
   flagged as missing.
 
