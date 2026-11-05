@@ -87,6 +87,22 @@ check_touch_points() {
     fi
 }
 
+# target/ never shrinks on its own: every new base version leaves the previous build artifacts behind. The stamp is
+# taken when the sync starts; once the checks have built everything for the new base, whatever they didn't use goes.
+sweep_stamp() {
+    command -v cargo-sweep > /dev/null || return 0
+    grep -qx "sweep.timestamp" .git/info/exclude 2> /dev/null || echo "sweep.timestamp" >> .git/info/exclude
+    cargo sweep --stamp > /dev/null
+}
+
+sweep_unused() {
+    command -v cargo-sweep > /dev/null || return 0
+    [[ -f sweep.timestamp ]] || return 0
+    step "Removing build artifacts unused since the sync started"
+    cargo sweep --file
+    rm -f sweep.timestamp
+}
+
 start() {
     local new_tag="${1:-}"
     local old_tag
@@ -121,6 +137,8 @@ start() {
 
     step "Tagging the rollback point bolt-pre-$new_tag"
     git tag "bolt-pre-$new_tag" bolt
+
+    sweep_stamp
 
     step "Merging on sync/$new_tag"
     git switch --quiet -c "sync/$new_tag" bolt
@@ -186,6 +204,8 @@ continue_sync() {
 
     step "Touch points"
     check_touch_points "$new_tag" "bolt-pre-$new_tag"
+
+    sweep_unused
 
     echo
     echo "Checks passed for Zed $old_tag → $new_tag. Before --finish:"
