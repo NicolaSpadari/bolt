@@ -1301,7 +1301,7 @@ impl Render for SearchPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.rows();
         let row_count = rows.len();
-        let mut key_context = KeyContext::new_with_defaults();
+        let mut key_context = KeyContext::new_with_defaults(cx.platform_info().os);
         key_context.add("BoltSearchPanel");
         v_flex()
             .id("bolt-search-panel")

@@ -2110,7 +2110,7 @@ fn render_progress_bar(cx: &App) -> impl IntoElement {
 impl Render for ScmPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let rows = self.rows();
-        let mut key_context = KeyContext::new_with_defaults();
+        let mut key_context = KeyContext::new_with_defaults(cx.platform_info().os);
         key_context.add("BoltScmPanel");
         v_flex()
             .id("bolt-scm-panel")

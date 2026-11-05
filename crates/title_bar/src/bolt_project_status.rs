@@ -14,7 +14,8 @@ impl TitleBar {
         let mut repository = None;
         let mut linked_worktree_name = None;
         if let Some(worktree) = self.effective_active_worktree(cx) {
-            repository = self.get_repository_for_worktree(&worktree, cx);
+            let path_style = worktree.read(cx).path_style();
+            repository = self.get_repository_for_worktree(&worktree, path_style, cx);
             let worktree_abs_path = worktree.read(cx).abs_path();
             project_name = worktree
                 .read(cx)
@@ -51,7 +52,7 @@ impl TitleBar {
                 };
 
                 if let Some(repo_name) = display_name.and_then(|n| n.to_str()) {
-                    let visible_worktrees_in_repo = self.visible_worktrees_in_repository(repo, cx);
+                    let visible_worktrees_in_repo = self.visible_worktrees_in_repository(repo, path_style, cx);
                     let name = if visible_worktrees_in_repo == 1 {
                         if let Ok(relative) =
                             worktree_abs_path.strip_prefix(&*repo.work_directory_abs_path)
