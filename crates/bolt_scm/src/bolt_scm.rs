@@ -1630,6 +1630,11 @@ impl ScmPanel {
                     // UI rems and UI line height, which drift from the buffer font metrics.
                     .when(message_empty, |this| {
                         let text_style = commit_input_style(cx).text;
+                        // Non single-line editors shift their text (and cursor) right by the font descent
+                        // (`GutterDimensions::default_with_margin`): without it the cursor sits on the first glyph.
+                        let font_id = window.text_system().resolve_font(&text_style.font());
+                        let font_size = text_style.font_size.to_pixels(window.rem_size());
+                        let content_margin = -window.text_system().descent(font_id, font_size);
                         this.child(
                             div()
                                 .absolute()
@@ -1638,6 +1643,7 @@ impl ScmPanel {
                                 .py_1()
                                 .child(
                                     div()
+                                        .ml(content_margin)
                                         .font_family(text_style.font_family)
                                         .text_size(text_style.font_size)
                                         .line_height(text_style.line_height)
