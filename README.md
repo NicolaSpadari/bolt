@@ -3,7 +3,7 @@
 Bolt is a personal fork of [Zed](https://github.com/zed-industries/zed): Zed's speed and native UI, with the parts of
 the VS Code experience I rely on, and without the features I don't use.
 
-Based on Zed **v1.23.3**. macOS (Apple Silicon) only.
+Based on Zed **v1.27.0**. macOS (Apple Silicon) only.
 
 ---
 
@@ -19,6 +19,10 @@ Based on Zed **v1.23.3**. macOS (Apple Silicon) only.
 - **Footer**: project name, branch and repository button.
 - **Iconify previews**: icon names such as `ph:bed` or `i-lucide-check` show as the icon itself, read from the
   project's `node_modules` (setting `iconify`).
+- **i18n labels** (like x18n for VS Code): keys such as `t("main.title")` or `$lang("main.close")` show their
+  translation, with placeholders and plurals resolved from the call; the raw key shows on the cursor row and on hover.
+  Labels come from the project's locale files (JSON or Laravel PHP, one file or one folder per locale, flat or nested
+  keys) or from other directories (setting `i18n`, `i18n.projects` for a single project).
 - **Theme and icons**: One Dark Pro (syntax colors generated from the VS Code theme with
   `script/bolt-theme-from-vscode`, LSP semantic tokens on) and Material Icon Theme by default; macOS system UI font.
 - **Editor details**: VS Code-style smooth cursor blinking, VS Code wording for merge conflicts, no extension

@@ -36,4 +36,8 @@ Like x18n's VS Code in-place mode (`packages/vscode/src/model/inplace.ts`, `anno
 - Earlier sources win on duplicate keys (project dirs before `paths`). Cached per file, reloaded when mtime changes.
 
 ## Settings (`i18n`, user or project `.zed/settings.json`)
-`enabled` (true), `locale` ("en"), `paths` ([] — absolute), `functions` ([]), `max_length` (40).
+`enabled` (true), `locale` ("en"), `paths` ([] — absolute), `functions` ([]), `max_length` (40),
+`projects` ({}): extra `paths` / `functions` for the files under a project root (absolute, `~/` allowed), so the user
+settings can configure one project (cb-frontend → cb-backend `resources/lang` + `$lang`) without affecting the others.
+No format setting: the structure (folder or file per locale), the format (`.json` / `.php`) and flat vs nested keys are
+recognized per file.

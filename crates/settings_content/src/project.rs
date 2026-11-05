@@ -123,6 +123,21 @@ pub struct I18nSettingsContent {
     ///
     /// Default: 40
     pub max_length: Option<usize>,
+    /// Extra `paths` and `functions` per project, keyed by the project's absolute path (`~/` allowed), for files
+    /// under it only. Lets the user settings configure a single project.
+    ///
+    /// Default: {}
+    pub projects: Option<HashMap<String, I18nProjectSettingsContent>>,
+}
+
+/// BOLT: `i18n.projects` entry.
+#[with_fallible_options]
+#[derive(Debug, PartialEq, Clone, Default, Serialize, Deserialize, JsonSchema, MergeFrom)]
+pub struct I18nProjectSettingsContent {
+    /// Absolute paths of translation directories outside the project.
+    pub paths: Option<Vec<String>>,
+    /// Translate functions to scan besides the vue-i18n and Laravel ones.
+    pub functions: Option<Vec<String>>,
 }
 
 /// When to scan content of linked directories.

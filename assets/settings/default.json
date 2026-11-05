@@ -2395,6 +2395,9 @@
     "functions": [],
     // Longest translation shown in place of its key; longer ones are shown truncated after the key.
     "max_length": 40,
+    // Extra `paths` and `functions` for the files under a project, keyed by its absolute path (`~/` allowed), e.g.
+    // "~/code/frontend": { "paths": ["~/code/backend/resources/lang"], "functions": ["$lang"] }
+    "projects": {},
   },
   // The capabilities granted to extensions.
   //

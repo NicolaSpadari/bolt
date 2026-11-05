@@ -74,6 +74,31 @@ pub struct I18nSettings {
     pub paths: Vec<PathBuf>,
     pub functions: Vec<String>,
     pub max_length: usize,
+    /// Project root → its extra translation directories and functions.
+    pub projects: Vec<(PathBuf, Vec<PathBuf>, Vec<String>)>,
+}
+
+impl I18nSettings {
+    /// The global `paths` / `functions` plus those of every `projects` entry holding `file_path`.
+    fn for_file(&self, file_path: &Path) -> Self {
+        let mut settings = self.clone();
+        for (root, paths, functions) in &self.projects {
+            if file_path.starts_with(root) {
+                settings.paths.extend(paths.iter().cloned());
+                settings.functions.extend(functions.iter().cloned());
+            }
+        }
+        settings.projects.clear();
+        settings
+    }
+}
+
+/// `~/…` → the home directory.
+fn expand_home(path: &str) -> PathBuf {
+    match (path.strip_prefix("~/"), std::env::home_dir()) {
+        (Some(rest), Some(home)) => home.join(rest),
+        _ => PathBuf::from(path),
+    }
 }
 
 impl Settings for I18nSettings {
@@ -82,9 +107,21 @@ impl Settings for I18nSettings {
         Self {
             enabled: i18n.enabled.unwrap_or(true),
             locale: i18n.locale.unwrap_or_else(|| "en".to_string()),
-            paths: i18n.paths.unwrap_or_default().into_iter().map(PathBuf::from).collect(),
+            paths: i18n.paths.unwrap_or_default().iter().map(|path| expand_home(path)).collect(),
             functions: i18n.functions.unwrap_or_default(),
             max_length: i18n.max_length.unwrap_or(40),
+            projects: i18n
+                .projects
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(root, project)| {
+                    (
+                        expand_home(&root),
+                        project.paths.unwrap_or_default().iter().map(|path| expand_home(path)).collect(),
+                        project.functions.unwrap_or_default(),
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -210,6 +247,7 @@ impl I18n {
             return;
         }
         let file_path = local_file.abs_path(cx);
+        let settings = settings.for_file(&file_path);
         let background = cx.background_executor().clone();
         self.scan = cx.spawn_in(window, async move |this, cx| {
             background.timer(SCAN_DEBOUNCE).await;
@@ -1249,6 +1287,28 @@ mod tests {
         assert!(matches!(catalog.lookup("main.titles"), Lookup::Namespace));
         assert!(matches!(catalog.lookup("main"), Lookup::Namespace));
         assert!(matches!(catalog.lookup("main.nope"), Lookup::Missing));
+    }
+
+    #[test]
+    fn project_entries_apply_to_their_files_only() {
+        let settings = I18nSettings {
+            enabled: true,
+            locale: "en".to_string(),
+            paths: vec![PathBuf::from("/global")],
+            functions: Vec::new(),
+            max_length: 40,
+            projects: vec![(
+                PathBuf::from("/code/frontend"),
+                vec![PathBuf::from("/code/backend/lang")],
+                vec!["$lang".to_string()],
+            )],
+        };
+        let inside = settings.for_file(Path::new("/code/frontend/src/App.vue"));
+        assert_eq!(inside.paths, [PathBuf::from("/global"), PathBuf::from("/code/backend/lang")]);
+        assert_eq!(inside.functions, ["$lang"]);
+        let outside = settings.for_file(Path::new("/code/frontend-other/App.vue"));
+        assert_eq!(outside.paths, [PathBuf::from("/global")]);
+        assert!(outside.functions.is_empty());
     }
 
     #[test]

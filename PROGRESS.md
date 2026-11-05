@@ -332,7 +332,7 @@ Every edit is marked `// BOLT:` (`git grep -n "BOLT:"`). Pure additions (new fil
 | `assets/settings/default.json` (UI) | `ui_font_family: .SystemUIFont`; `project_panel.folder_indicator: both`, `hide_root: true` | like VS Code/Cursor |
 | `crates/install_cli/src/install_cli_binary.rs`, `crates/cli/src/main.rs` | CLI installed as `/usr/local/bin/bolt` (never replaces Zed's `zed`), clap name `bolt` | `bolt ./folder` |
 | `crates/zed/src/main.rs`, `Cargo.toml`, `crates/zed/Cargo.toml` | `bolt_iconify` crate wiring | Iconify |
-| `crates/settings_content/src/project.rs`, `crates/settings/src/vscode_import.rs`, `assets/settings/default.json` | `i18n` setting (`I18nSettingsContent`: enabled, locale, paths, functions, max_length), user or project | `bolt_i18n` |
+| `crates/settings_content/src/project.rs`, `crates/settings/src/vscode_import.rs`, `assets/settings/default.json` | `i18n` setting (`I18nSettingsContent`: enabled, locale, paths, functions, max_length, projects → `I18nProjectSettingsContent`), user or project | `bolt_i18n` |
 | `crates/editor/src/display_map.rs` | `HighlightKey::BoltI18nMissing` | i18n keys without a translation |
 | `crates/zed/src/main.rs`, `Cargo.toml`, `crates/zed/Cargo.toml` | `bolt_i18n` crate wiring | i18n labels |
 | `crates/project/src/git_store.rs` (merge) | `compute_snapshot` also emits `StatusesChanged` when only the merge message changes | merge message prefill raced with `git merge` |
