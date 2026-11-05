@@ -206,6 +206,22 @@ impl Iconify {
             *revealed_rows = cursor_rows;
 
             let full_range = editor::MultiBufferOffset(0)..snapshot.len();
+            // Icon folds used to be persisted and came back on reopen as plain "⋯" folds, which hide the icon until
+            // clicked: drop untagged folds that exactly cover an icon name.
+            if force {
+                let icon_ranges = icons
+                    .iter()
+                    .map(|icon| icon.range.start.to_point(&snapshot)..icon.range.end.to_point(&snapshot))
+                    .collect::<Vec<_>>();
+                let stale_folds = editor
+                    .display_snapshot(cx)
+                    .folds_in_range(full_range.clone())
+                    .filter(|fold| fold.placeholder.type_tag.is_none())
+                    .map(|fold| fold.range.start.to_point(&snapshot)..fold.range.end.to_point(&snapshot))
+                    .filter(|range| icon_ranges.contains(range))
+                    .collect::<Vec<_>>();
+                editor.unfold_ranges(&stale_folds, false, false, cx);
+            }
             editor.remove_folds_with_type(
                 &[full_range],
                 TypeId::of::<IconifyFold>(),

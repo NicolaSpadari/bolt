@@ -864,6 +864,8 @@ impl Editor {
         const FINGERPRINT_LEN: usize = 32;
         let db_folds = display_snapshot
             .folds_in_range(MultiBufferOffset(0)..display_snapshot.buffer_snapshot().len())
+            // BOLT: same as above, for the path-based storage (restored when the file is reopened).
+            .filter(|fold| fold.placeholder.type_tag.is_none())
             .map(|fold| {
                 let start = fold
                     .range
