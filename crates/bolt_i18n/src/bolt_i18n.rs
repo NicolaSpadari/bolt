@@ -10,15 +10,12 @@ use std::{
     collections::BTreeMap,
     ops::Range,
     path::{Path, PathBuf},
-    sync::{
-        Arc, LazyLock, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, LazyLock, Mutex},
     time::{Duration, SystemTime},
 };
 
 use collections::HashMap;
-use editor::{Anchor, Editor, EditorEvent, FoldPlaceholder, HighlightKey, Inlay, display_map::Crease};
+use editor::{Anchor, Editor, EditorEvent, FoldPlaceholder, HighlightKey, display_map::Crease};
 use gpui::{
     App, AppContext as _, Context, Entity, HighlightStyle, Hsla, SharedString, Subscription, Task, WeakEntity, Window,
 };
@@ -64,8 +61,6 @@ const DEFAULT_FUNCTIONS: &[&str] = &[
     "Lang::get",
     "Lang::choice",
 ];
-/// Inlay ids share the debugger value id space; start far above its counter.
-static NEXT_INLAY_ID: AtomicUsize = AtomicUsize::new(1 << 40);
 
 #[derive(Debug, Clone, RegisterSetting)]
 pub struct I18nSettings {
@@ -156,10 +151,11 @@ impl editor::Addon for I18nAddon {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Label {
-    /// Short enough to replace the key.
-    InPlace(SharedString),
-    /// Too long: shown truncated after the key, at this offset (past the closing quote).
-    Hint { text: SharedString, offset: usize },
+    /// Replaces the key. `full_value` is set when `value` was truncated to `max_length`.
+    InPlace {
+        value: SharedString,
+        full_value: Option<SharedString>,
+    },
     Missing,
 }
 
@@ -174,7 +170,6 @@ struct Annotation {
     range: Range<Anchor>,
     key: SharedString,
     label: Label,
-    hint_position: Option<Anchor>,
 }
 
 struct I18n {
@@ -182,8 +177,6 @@ struct I18n {
     annotations: Vec<Annotation>,
     /// Rows holding a cursor the last time folds were applied; their keys show as text.
     revealed_rows: Vec<u32>,
-    /// Hints after the keys whose value is too long to replace them.
-    inlay_ids: Vec<usize>,
     scan: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -210,7 +203,6 @@ impl I18n {
             editor: editor.downgrade(),
             annotations: Vec::new(),
             revealed_rows: Vec::new(),
-            inlay_ids: Vec::new(),
             scan: Task::ready(()),
             _subscriptions: vec![editor_subscription, settings_subscription],
         }
@@ -265,10 +257,6 @@ impl I18n {
                     .map(|found| Annotation {
                         range: snapshot.anchor_after(anchor(found.key_range.start))
                             ..snapshot.anchor_before(anchor(found.key_range.end)),
-                        hint_position: match &found.label {
-                            Label::Hint { offset, .. } => Some(snapshot.anchor_before(anchor(*offset))),
-                            Label::InPlace(_) | Label::Missing => None,
-                        },
                         key: found.key,
                         label: found.label,
                     })
@@ -279,16 +267,14 @@ impl I18n {
         });
     }
 
-    /// Folds every short label except those on a row holding a cursor. With `force` (new scan results), also refreshes
-    /// the hints of long labels and the missing-key highlights; without it, nothing happens unless the cursor rows
-    /// changed.
+    /// Folds every label except those on a row holding a cursor. With `force` (new scan results), also refreshes the
+    /// missing-key highlights; without it, nothing happens unless the cursor rows changed.
     fn apply_folds(&mut self, force: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(editor) = self.editor.upgrade() else {
             return;
         };
         let annotations = &self.annotations;
         let revealed_rows = &mut self.revealed_rows;
-        let inlay_ids = &mut self.inlay_ids;
         editor.update(cx, |editor, cx| {
             let snapshot = editor.buffer().read(cx).snapshot(cx);
             let mut cursor_rows: Vec<u32> = editor
@@ -316,7 +302,7 @@ impl I18n {
             let creases = annotations
                 .iter()
                 .filter_map(|annotation| {
-                    let Label::InPlace(value) = &annotation.label else {
+                    let Label::InPlace { value, full_value } = &annotation.label else {
                         return None;
                     };
                     let start = annotation.range.start.to_point(&snapshot).row;
@@ -327,7 +313,12 @@ impl I18n {
                     (start == end && !revealed).then(|| {
                         Crease::simple(
                             annotation.range.clone(),
-                            label_placeholder(value.clone(), annotation.key.clone(), color),
+                            label_placeholder(
+                                value.clone(),
+                                annotation.key.clone(),
+                                full_value.clone(),
+                                color,
+                            ),
                         )
                     })
                 })
@@ -337,22 +328,6 @@ impl I18n {
             if !force {
                 return;
             }
-            let old_inlays = inlay_ids
-                .drain(..)
-                .map(project::InlayId::DebuggerValue)
-                .collect::<Vec<_>>();
-            let new_inlays = annotations
-                .iter()
-                .filter_map(|annotation| match (&annotation.label, annotation.hint_position) {
-                    (Label::Hint { text, .. }, Some(position)) => {
-                        let id = NEXT_INLAY_ID.fetch_add(1, Ordering::Relaxed);
-                        inlay_ids.push(id);
-                        Some(Inlay::debugger(id, position, text.as_ref()))
-                    }
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            editor.splice_inlays(&old_inlays, new_inlays, cx);
             editor.highlight_text(
                 HighlightKey::BoltI18nMissing,
                 annotations
@@ -370,7 +345,12 @@ impl I18n {
     }
 }
 
-fn label_placeholder(value: SharedString, key: SharedString, color: Hsla) -> FoldPlaceholder {
+fn label_placeholder(
+    value: SharedString,
+    key: SharedString,
+    full_value: Option<SharedString>,
+    color: Hsla,
+) -> FoldPlaceholder {
     FoldPlaceholder {
         render: Arc::new(move |fold_id, _, cx: &mut App| {
             let settings = ThemeSettings::get_global(cx);
@@ -383,7 +363,14 @@ fn label_placeholder(value: SharedString, key: SharedString, color: Hsla) -> Fol
                 .text_size(settings.buffer_font_size(cx))
                 .text_color(color)
                 .child(value.clone())
-                .tooltip(Tooltip::text(key.clone()))
+                .tooltip({
+                    let key = key.clone();
+                    let full_value = full_value.clone();
+                    move |_, cx| match &full_value {
+                        Some(full_value) => Tooltip::with_meta(key.clone(), None, full_value.clone(), cx),
+                        None => Tooltip::simple(key.clone(), cx),
+                    }
+                })
                 .into_any_element()
         }),
         constrain_width: false,
@@ -417,18 +404,11 @@ fn find_labels(text: &str, file_path: &Path, settings: &I18nSettings) -> Vec<Fou
                         call_interpolation(text, key_range.end)
                     };
                     let value = interpolate(&collapse_newlines(value), &interpolation);
-                    if value.chars().count() <= settings.max_length {
-                        Label::InPlace(value.into())
-                    } else {
-                        let closing_quote = text[key_range.end..]
-                            .chars()
-                            .next()
-                            .filter(|character| matches!(character, '\'' | '"' | '`'))
-                            .map_or(0, char::len_utf8);
-                        Label::Hint {
-                            text: format!(" {}", truncate(&value, settings.max_length)).into(),
-                            offset: key_range.end + closing_quote,
-                        }
+                    let truncated = truncate(&value, settings.max_length);
+                    let full_value = (truncated != value).then(|| value.into());
+                    Label::InPlace {
+                        value: truncated.into(),
+                        full_value,
                     }
                 }
                 Lookup::Namespace => return None,

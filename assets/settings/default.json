@@ -2393,7 +2393,7 @@
     "paths": [],
     // Translate functions to scan besides the vue-i18n and Laravel ones, e.g. `$lang`.
     "functions": [],
-    // Longest translation shown in place of its key; longer ones are shown truncated after the key.
+    // Longest translation shown in place of its key; longer ones replace it truncated.
     "max_length": 40,
     // Extra `paths` and `functions` for the files under a project, keyed by its absolute path (`~/` allowed), e.g.
     // "~/code/frontend": { "paths": ["~/code/backend/resources/lang"], "functions": ["$lang"] }

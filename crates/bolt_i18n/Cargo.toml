@@ -18,7 +18,6 @@ editor.workspace = true
 gpui.workspace = true
 log.workspace = true
 multi_buffer.workspace = true
-project.workspace = true
 regex.workspace = true
 serde_json.workspace = true
 settings.workspace = true

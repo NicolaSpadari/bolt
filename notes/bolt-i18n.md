@@ -8,8 +8,10 @@ Like x18n's VS Code in-place mode (`packages/vscode/src/model/inplace.ts`, `anno
   the inlay hint color. Hover on the value: tooltip with the raw key.
 - Rows holding a cursor or a selection show the raw key (x18n `revealed`).
 - Missing key: raw key in the warning color, never folded.
-- Value longer than `max_length` (x18n `annotationMaxLength`, 40): not folded; after the closing quote a hint
-  ` <value truncated to max_length - 1>…` (x18n `inlayHints` + `truncate`). Newlines in values → one space.
+- Value longer than `max_length` (x18n `annotationMaxLength`, 40): still folded, truncated to `max_length - 1`
+  characters + `…` (x18n `truncate`); the tooltip shows the key and the full value. Bolt deviation (user request
+  2026-11-06): x18n leaves long values unfolded with an inlay hint after the closing quote. Newlines in values → one
+  space.
 - Interpolation (Bolt addition, user request 2026-11-05): placeholders show the expression passed for them,
   `{name}` → `{user.name}`, from `t(key, { name: user.name })`, `t(key, [a, b])` (`{0}`), Laravel
   `__(key, ['name' => $x])` (`:name`) and `<i18n-t>` slots (`<template #from>{{ from }}</template>`). `{n}` / `{count}`

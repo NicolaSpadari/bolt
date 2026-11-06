@@ -119,7 +119,7 @@ pub struct I18nSettingsContent {
     ///
     /// Default: []
     pub functions: Option<Vec<String>>,
-    /// Longest translation shown in place of its key; longer ones are shown truncated after the key.
+    /// Longest translation shown in place of its key; longer ones replace it truncated.
     ///
     /// Default: 40
     pub max_length: Option<usize>,
