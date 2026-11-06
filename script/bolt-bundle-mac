@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# BOLT: builds target/release/Bolt.app (release build, Bolt icon, ad-hoc signature) for local use.
+# BOLT: builds target/release/Bolt.app (release build, Bolt icon, Apple Development signature or ad-hoc) for local use.
 # Zed's script/bundle-mac depends on Zed's release infrastructure (cargo-bundle fork, notarization, Sentry); this is
 # the minimal local equivalent.
 # Usage: script/bolt-bundle-mac [--clean] [--install]
@@ -78,8 +78,12 @@ with open(output, "wb") as file:
     plistlib.dump(info, file)
 PY
 
-codesign --force --deep --sign - "$app" >/dev/null 2>&1
-echo "Built $app (Bolt $version)"
+# An ad-hoc signature's designated requirement is the binary's cdhash, which changes on every build, so macOS
+# (TCC) forgets the Downloads/Documents/... grants each time. A certificate-based signature keeps the requirement
+# stable across builds. BOLT_SIGNING_IDENTITY overrides the auto-detected Apple Development identity.
+identity="${BOLT_SIGNING_IDENTITY:-$(security find-identity -v -p codesigning | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -1)}"
+codesign --force --deep --sign "${identity:--}" "$app" >/dev/null 2>&1
+echo "Built $app (Bolt $version, signed with ${identity:-ad-hoc signature})"
 
 if $install; then
     rm -rf /Applications/Bolt.app
