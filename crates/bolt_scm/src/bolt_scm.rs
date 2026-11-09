@@ -470,8 +470,10 @@ impl ScmPanel {
         }
     }
 
-    /// Fills the empty commit input with git's merge message (`.git/MERGE_MSG`), like VS Code. Once per merge, so a
-    /// message cleared by the user stays cleared.
+    /// Keeps the commit input in sync with git's merge message (`.git/MERGE_MSG`) like VS Code's commit template
+    /// (`scmInput.ts`): when it changes, an empty input or one still holding the previous message takes the new one,
+    /// so the message appears when a merge starts and goes away when it is aborted (also from the terminal). Text
+    /// typed by the user is kept, and a message cleared by the user stays cleared.
     fn prefill_merge_message(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let (Some(repository), Some(editor)) = (&self.repository, &self.commit_editor) else {
             return;
@@ -480,19 +482,13 @@ impl ScmPanel {
         if merge_message == self.prefilled_merge_message {
             return;
         }
-        self.prefilled_merge_message = merge_message.clone();
-        // The input is single-line: keep the subject, dropping git's `# Conflicts:` comment block.
-        let Some(subject) = merge_message.as_ref().and_then(|message| {
-            message
-                .lines()
-                .map(str::trim)
-                .find(|line| !line.is_empty() && !line.starts_with('#'))
-                .map(str::to_string)
-        }) else {
-            return;
-        };
+        let old_subject = merge_subject(self.prefilled_merge_message.as_deref()).to_string();
+        let subject = merge_subject(merge_message.as_deref()).to_string();
+        self.prefilled_merge_message = merge_message;
         editor.update(cx, |editor, cx| {
-            if editor.text(cx).trim().is_empty() {
+            let text = editor.text(cx);
+            let text = text.trim();
+            if (text.is_empty() || text == old_subject) && text != subject {
                 editor.set_text(subject, window, cx);
             }
         });
@@ -2063,6 +2059,19 @@ async fn commits_ahead_of_upstream(
         .trim()
         .parse()
         .log_err()
+}
+
+/// The first non-comment line of a merge message, empty without one. The input keeps only the subject, dropping
+/// git's `# Conflicts:` comment block.
+fn merge_subject(message: Option<&str>) -> &str {
+    message
+        .and_then(|message| {
+            message
+                .lines()
+                .map(str::trim)
+                .find(|line| !line.is_empty() && !line.starts_with('#'))
+        })
+        .unwrap_or_default()
 }
 
 /// Zed's git panel commit editor style (buffer font, `git_commit_buffer_font_size`).

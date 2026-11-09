@@ -162,7 +162,7 @@ file is upstream's hottest (46 commits / 3 months).
   - "Create Branch From…" = `git checkout -q -b <name> --no-track <ref>` (VS Code): before, a branch created from
     `origin/main` tracked `origin/main`, so Sync pushed it to `main` (blocked by GitHub rules on cb-frontend).
     Branch popover (footer): "Create From…" button in the tab bar.
-  - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line, once per merge); placeholder drawn by
+  - Commit input: merge message prefilled from `.git/MERGE_MSG` (subject line; VS Code commit-template rule: replaces an empty input or the previous message, so `git merge --abort` clears it, typed text kept); placeholder drawn by
     the panel as a truncated `Label` (ellipsis). It is offset by the editor's content margin (font descent,
     `offset_content`), otherwise the cursor is drawn over the first glyph. It is offset by the editor's content margin (font descent,
     `offset_content`), otherwise the cursor is drawn over the first glyph.
