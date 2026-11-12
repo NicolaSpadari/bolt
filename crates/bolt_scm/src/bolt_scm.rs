@@ -1292,7 +1292,7 @@ impl ScmPanel {
             let result: Result<()> = async {
                 let output = repository
                     .update(cx, |repository, cx| {
-                        repository.fetch(FetchOptions::All, askpass, cx)
+                        repository.fetch(FetchOptions::All, Some(askpass), cx)
                     })
                     .await??;
                 this.update(cx, |this, cx| {

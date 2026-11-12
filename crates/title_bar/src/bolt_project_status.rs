@@ -24,32 +24,24 @@ impl TitleBar {
                 .map(|name| SharedString::from(name.to_string()));
             if let Some(repo) = &repository {
                 let repo = repo.read(cx);
-                let identity = repo_identity_path(&repo.common_dir_abs_path, repo.path_style);
-                let identity_fallback =
-                    repo_identity_path_if_local(&repo.common_dir_abs_path, repo.path_style);
-                linked_worktree_name = linked_worktree_name_anchor(
-                    repo.main_worktree_abs_path(),
-                    identity_fallback,
-                    repo.is_linked_worktree(),
+                let identity = repo_identity_path(&repo.common_dir_abs_path, path_style);
+                linked_worktree_name = linked_worktree_short_name(
+                    repo.linked_worktree_anchor_path(),
+                    repo.work_directory_abs_path.as_ref(),
+                    path_style,
                 )
-                .and_then(|name_anchor_path| {
-                    linked_worktree_short_name(
-                        name_anchor_path,
-                        repo.work_directory_abs_path.as_ref(),
-                        repo.path_style,
-                    )
-                })
                 .or_else(|| {
                     repo.is_linked_worktree()
                         .then_some(project_name.clone())
                         .flatten()
                 });
 
-                let display_name = if identity.extension() == Some(std::ffi::OsStr::new("git")) {
-                    identity.file_stem()
-                } else {
-                    repo.path_style.file_name(identity)
-                };
+                let display_name =
+                    if path_style.extension(identity) == Some(std::ffi::OsStr::new("git")) {
+                        path_style.file_stem(identity)
+                    } else {
+                        path_style.file_name(identity)
+                    };
 
                 if let Some(repo_name) = display_name.and_then(|n| n.to_str()) {
                     let visible_worktrees_in_repo = self.visible_worktrees_in_repository(repo, path_style, cx);
