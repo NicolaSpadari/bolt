@@ -40,7 +40,7 @@ Status legend: ✅ done · 🚧 in progress · ⏳ todo · ⛔ out of scope
 
 - Keep: Zed extensions (unchanged, zed.dev registry), terminal. Drop: remote dev (SSH/WSL/containers), debugger,
   REPL/Jupyter, vim/helix modes.
-- Base: Zed **v1.27.0** (`.bolt-zed-version`). Hosting: private repo `NicolaSpadari/bolt` on the **personal** GitHub account; repo-local git
+- Base: Zed **v1.28.1** (`.bolt-zed-version`). Hosting: private repo `NicolaSpadari/bolt` on the **personal** GitHub account; repo-local git
   identity `Nicola Spadari <spadari.nicola@gmail.com>` (never the work account/email).
 - Default theme: user's custom **One Dark Pro Cursor** (dark mode), bundled as Bolt's default. No third-party credit
   for it (origin unknown, user's own work).
@@ -457,3 +457,8 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   `bolt_search_panel`, `TitleBar::get_repository_for_worktree` / `visible_worktrees_in_repository` take a `PathStyle`
   (`bolt_project_status`). Checks: build, clippy, zed tests build, all-features check, touch points, markers, smoke run
   (first frame, no errors). No new visible "Zed" strings.
+- 2026-11-12: upstream sync, Zed v1.27.0 → v1.28.1 (97 upstream commits, 339 files), on `sync/v1.28.1` (rollback tag
+  `bolt-pre-v1.28.1`). Conflict: `settings_ui/src/pages.rs` (new upstream `#[cfg(test)]` re-export next to the `ai`
+  gate, kept both). API drift: `Repository::fetch` takes `Option<AskPassDelegate>` (`bolt_scm`), title bar linked
+  worktree name now from `Repository::linked_worktree_anchor_path()` + `PathStyle` file stem (`bolt_project_status`).
+  Checks: build, clippy, zed tests build, all-features check, touch points, markers. No new visible "Zed" strings.
