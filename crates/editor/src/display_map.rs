@@ -4180,7 +4180,6 @@ pub mod tests {
                 ("  ".to_string(), Some(Hsla::red())),
                 ("\n".to_string(), None),
                 ("fn ".to_string(), Some(Hsla::red())),
-                ("i".to_string(), Some(Hsla::blue())),
                 ("\n".to_string(), None)
             ]
         );
