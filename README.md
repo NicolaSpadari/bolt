@@ -3,7 +3,7 @@
 Bolt is a personal fork of [Zed](https://github.com/zed-industries/zed): Zed's speed and native UI, with the parts of
 the VS Code experience I rely on, and without the features I don't use.
 
-Based on Zed **v1.27.0**. macOS (Apple Silicon) only.
+Based on Zed **v1.28.1**. macOS (Apple Silicon) only.
 
 ---
 
