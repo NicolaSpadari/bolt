@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use git::stash::StashEntry;
-use git_ui::commit_view::CommitView;
+use git_ui::commit_view::{CommitView, CommitViewOptions};
 use gpui::{App, Context, Entity, PromptLevel, SharedString, Task, WeakEntity, Window};
 use picker::{Picker, PickerDelegate};
 use project::git_store::Repository;
@@ -155,8 +155,10 @@ impl PickerDelegate for StashPickerDelegate {
                 entry.oid.to_string(),
                 repository.downgrade(),
                 workspace,
-                Some(index),
-                None,
+                CommitViewOptions {
+                    stash: Some(index),
+                    ..CommitViewOptions::default()
+                },
                 window,
                 cx,
             ),
