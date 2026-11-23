@@ -16,6 +16,7 @@ pub struct ScrollbarSettings {
 
 #[derive(Debug, Clone, PartialEq, RegisterSetting)]
 pub struct GitPanelSettings {
+    pub date_style: settings::GitDateStyle,
     pub button: bool,
     // BOLT: Bolt's git panel replaces this one in the dock.
     pub bolt_panel: bool,
@@ -62,6 +63,7 @@ impl Settings for GitPanelSettings {
     fn from_settings(content: &settings::SettingsContent) -> Self {
         let git_panel = content.git_panel.clone().unwrap();
         Self {
+            date_style: git_panel.date_style.unwrap(),
             button: git_panel.button.unwrap(),
             bolt_panel: git_panel.bolt_panel.unwrap_or(true),
             dock: git_panel.dock.unwrap().into(),
