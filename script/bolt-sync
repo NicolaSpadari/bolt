@@ -89,6 +89,20 @@ check_touch_points() {
 
 # target/ never shrinks on its own: every new base version leaves the previous build artifacts behind. The stamp is
 # taken when the sync starts; once the checks have built everything for the new base, whatever they didn't use goes.
+# Commits that compile fine but may change behavior Bolt relies on: upstream files Bolt edits, the git crates
+# behind `bolt_scm`, the settings defaults.
+list_relevant_commits() {
+    local old_tag="$1" new_tag="$2"
+    local paths=()
+    while IFS= read -r file; do
+        [[ -n "$file" ]] && paths+=("$file")
+    done < <(git diff --name-only --diff-filter=M "$new_tag" HEAD -- . ':!crates/bolt_*' ':!notes' ':!script/bolt-*' \
+        ':!PROGRESS.md' ':!HANDOVER.md' ':!CLAUDE.local.md' ':!.bolt-zed-version' ':!Cargo.lock')
+    paths+=(crates/git crates/git_ui crates/git_ui_core crates/project/src/git_store.rs crates/project/src/git_store)
+    git log --no-merges --invert-grep --grep='^Bump to ' --format='  %h %s' "$old_tag..$new_tag" -- "${paths[@]}"
+    echo "  (upstream: https://github.com/zed-industries/zed/compare/$old_tag...$new_tag)"
+}
+
 sweep_stamp() {
     command -v cargo-sweep > /dev/null || return 0
     grep -qx "sweep.timestamp" .git/info/exclude 2> /dev/null || echo "sweep.timestamp" >> .git/info/exclude
@@ -204,6 +218,12 @@ continue_sync() {
 
     step "Touch points"
     check_touch_points "$new_tag" "bolt-pre-$new_tag"
+
+    step "Settings"
+    script/bolt-check-settings "$old_tag" "$new_tag" || fail "fix the Bolt defaults in assets/settings/default.json"
+
+    step "Upstream commits touching what Bolt builds on (read them for behavior changes)"
+    list_relevant_commits "$old_tag" "$new_tag"
 
     sweep_unused
 

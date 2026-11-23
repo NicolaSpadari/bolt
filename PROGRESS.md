@@ -462,3 +462,10 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   gate, kept both). API drift: `Repository::fetch` takes `Option<AskPassDelegate>` (`bolt_scm`), title bar linked
   worktree name now from `Repository::linked_worktree_anchor_path()` + `PathStyle` file stem (`bolt_project_status`).
   Checks: build, clippy, zed tests build, all-features check, touch points, markers. No new visible "Zed" strings.
+- 2026-11-23: upstream sync, Zed v1.28.1 → v1.29.3 (94 upstream commits), on `sync/v1.29.3` (rollback tag
+  `bolt-pre-v1.29.3`). Conflicts: `assets/settings/default.json` (new upstream comment / `git.blame.date_style` next to
+  Bolt's `preferred_line_length` / `show_avatar`, kept both), `crates/zed/Cargo.toml` (version), `crates/zed/src/zed.rs`
+  (upstream imports, `Panel` stays behind Bolt's `ai` gate). API drift: `CommitView::open` takes `CommitViewOptions`
+  (`bolt_scm` stash picker). `bolt-sync --continue` now also runs `script/bolt-check-settings` (Bolt defaults on keys
+  Zed removed) and lists the upstream commits touching Bolt's touch points and the git crates (behavior changes that
+  still compile). Reviewed: `project` whole-repo scan fallback over 64 paths (performance only, `bolt_rescan` unaffected).

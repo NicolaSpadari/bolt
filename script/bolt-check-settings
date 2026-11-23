@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""BOLT: settings keys Bolt still sets in assets/settings/default.json that upstream removed or renamed.
+
+Usage: script/bolt-check-settings <old-zed-tag> <new-zed-tag>
+
+A key counts as removed when it is in the old Zed tag and in HEAD but not in the new Zed tag: Zed would ignore the
+Bolt value without any error. Keys only Bolt defines (in neither tag) are fine. Exit code 1 when something is removed.
+"""
+
+import json
+import subprocess
+import sys
+
+DEFAULT_SETTINGS = "assets/settings/default.json"
+
+
+def strip_jsonc(text: str) -> str:
+    """Drops // and /* */ comments outside strings and trailing commas, so `json` can parse Zed's JSONC."""
+    output = []
+    index = 0
+    in_string = False
+    while index < len(text):
+        character = text[index]
+        if in_string:
+            output.append(character)
+            if character == "\\":
+                output.append(text[index + 1 : index + 2])
+                index += 2
+                continue
+            if character == '"':
+                in_string = False
+            index += 1
+        elif character == '"':
+            in_string = True
+            output.append(character)
+            index += 1
+        elif text.startswith("//", index):
+            newline = text.find("\n", index)
+            index = len(text) if newline == -1 else newline
+        elif text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            index = len(text) if end == -1 else end + 2
+        else:
+            output.append(character)
+            index += 1
+    stripped = "".join(output)
+    # Trailing commas: a comma followed only by whitespace before a closing bracket.
+    result = []
+    for position, character in enumerate(stripped):
+        if character == ",":
+            rest = stripped[position + 1 :].lstrip()
+            if rest[:1] in ("}", "]"):
+                continue
+        result.append(character)
+    return "".join(result)
+
+
+def key_paths(value, prefix=()):
+    paths = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            path = prefix + (key,)
+            paths.add(path)
+            paths |= key_paths(child, path)
+    return paths
+
+
+def load_keys(ref: str) -> set:
+    if ref == "WORKTREE":
+        with open(DEFAULT_SETTINGS, encoding="utf-8") as file:
+            text = file.read()
+    else:
+        text = subprocess.run(
+            ["git", "show", f"{ref}:{DEFAULT_SETTINGS}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    return key_paths(json.loads(strip_jsonc(text)))
+
+
+def main() -> int:
+    if len(sys.argv) != 3:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    old_tag, new_tag = sys.argv[1], sys.argv[2]
+    old_keys = load_keys(old_tag)
+    new_keys = load_keys(new_tag)
+    bolt_keys = load_keys("WORKTREE")
+
+    removed = sorted((bolt_keys & old_keys) - new_keys)
+    if removed:
+        print(f"Settings in {DEFAULT_SETTINGS} that Zed {new_tag} no longer has (renamed or removed upstream):")
+        for path in removed:
+            print("  " + ".".join(path))
+        return 1
+    print(f"Settings: every key Bolt keeps from Zed {old_tag} still exists in {new_tag}.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

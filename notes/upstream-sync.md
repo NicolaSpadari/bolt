@@ -44,6 +44,8 @@ git merge --no-ff main -m "Merge Zed $NEW into Bolt"
 #   conflicts → resolve (rerere replays known ones), recipes above
 cargo build && ./script/clippy -p 'bolt_*' -p zed && cargo test -p zed --no-run
 cargo check -p zed --features ai,collab,repl,debugger
+script/bolt-check-settings $OLD $NEW           # Bolt defaults on keys Zed renamed/removed (silently ignored otherwise)
+#   read the listed upstream commits touching Bolt's touch points / git crates: behavior changes that still compile
 cargo sweep --file                            # stamp taken (cargo sweep --stamp) before the merge: drops the old base's artifacts
 #   manual smoke run with stderr captured; re-check notes/rebrand-map.md for new "Zed" strings
 echo $NEW > .bolt-zed-version
