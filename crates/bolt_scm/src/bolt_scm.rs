@@ -9,7 +9,12 @@
 mod merge_picker;
 mod stash_picker;
 
-use std::{ops::Range, path::Path, sync::Arc, time::Duration};
+use std::{
+    ops::Range,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::Result;
 use askpass::AskPassDelegate;
@@ -683,6 +688,92 @@ impl ScmPanel {
             {
                 cx.update(|cx| show_error_toast(workspace, operation, error, cx));
             }
+        })
+        .detach();
+    }
+
+    /// VS Code's `git.stage` / `git.stageAllMerge` (`categorizeResourceByResolution`): staging conflicts that may be
+    /// unresolved asks first, so files with conflict markers don't get committed by accident.
+    fn stage_conflicts(
+        &mut self,
+        entries: Vec<Entry>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(repository) = self.repository.clone() else {
+            return;
+        };
+        if entries.is_empty() {
+            return;
+        }
+        let fs = self.project.read(cx).fs().clone();
+        let candidates: Vec<(RepoPath, Option<PathBuf>)> = {
+            let repository = repository.read(cx);
+            entries
+                .iter()
+                .filter_map(|entry| {
+                    let FileStatus::Unmerged(unmerged) = entry.status else {
+                        return None;
+                    };
+                    use git::status::UnmergedStatusCode::{Added, Deleted, Updated};
+                    match (unmerged.first_head, unmerged.second_head) {
+                        // BOTH_MODIFIED / BOTH_ADDED: unresolved only while the markers are there.
+                        (Updated, Updated) | (Added, Added) => Some((
+                            entry.repo_path.clone(),
+                            Some(repository.repo_path_to_abs_path(&entry.repo_path)),
+                        )),
+                        // DELETED_BY_THEM / DELETED_BY_US: VS Code resolves them with their own prompt.
+                        (Updated, Deleted) | (Deleted, Updated) => None,
+                        _ => Some((entry.repo_path.clone(), None)),
+                    }
+                })
+                .collect()
+        };
+        let paths: Vec<RepoPath> = entries.into_iter().map(|entry| entry.repo_path).collect();
+        let workspace = self.workspace.clone();
+        cx.spawn_in(window, async move |this, cx| {
+            let mut unresolved = Vec::new();
+            for (repo_path, abs_path) in candidates {
+                let is_unresolved = match abs_path {
+                    Some(abs_path) => match fs.load_bytes(&abs_path).await {
+                        Ok(bytes) => has_conflict_markers(&String::from_utf8_lossy(&bytes)),
+                        Err(error) => {
+                            if let Some(workspace) = workspace.upgrade() {
+                                cx.update(|_, cx| show_error_toast(workspace, "stage", error, cx))
+                                    .log_err();
+                            }
+                            return;
+                        }
+                    },
+                    None => true,
+                };
+                if is_unresolved {
+                    unresolved.push(repo_path);
+                }
+            }
+            if !unresolved.is_empty() {
+                let message = if let [repo_path] = unresolved.as_slice() {
+                    format!(
+                        "Are you sure you want to stage {} with merge conflicts?",
+                        repo_path.file_name().unwrap_or_default()
+                    )
+                } else {
+                    format!(
+                        "Are you sure you want to stage {} files with merge conflicts?",
+                        unresolved.len()
+                    )
+                };
+                let Ok(prompt) = cx.update(|window, cx| {
+                    window.prompt(PromptLevel::Warning, &message, None, &["Yes", "Cancel"], cx)
+                }) else {
+                    return;
+                };
+                if prompt.await != Ok(0) {
+                    return;
+                }
+            }
+            this.update(cx, |this, cx| this.stage(paths, true, cx))
+                .log_err();
         })
         .detach();
     }
@@ -1441,10 +1532,23 @@ impl ScmPanel {
                             menu.action("Commit", Commit.boxed_clone())
                                 .action("Undo Last Commit", git::Uncommit.boxed_clone())
                         })
-                        .submenu("Changes", |menu, _, _| {
-                            menu.action("Stage All Changes", git::StageAll.boxed_clone())
+                        .submenu("Changes", {
+                            let stage_all = panel.clone();
+                            move |menu, _, _| {
+                                // VS Code's `git.stageAll` leaves the Merge Changes group out, while Zed's `StageAll` would
+                                // also stage unresolved conflicts without asking.
+                                let stage_all = stage_all.clone();
+                                menu.entry("Stage All Changes", None, move |_, cx| {
+                                    stage_all
+                                        .update(cx, |panel, cx| {
+                                            let paths = panel.section_paths(SectionKind::Changes);
+                                            panel.stage(paths, true, cx)
+                                        })
+                                        .ok();
+                                })
                                 .action("Unstage All Changes", git::UnstageAll.boxed_clone())
                                 .action("Discard All Changes", DiscardAllChanges.boxed_clone())
+                            }
                         })
                         .submenu("Pull, Push", move |menu, _, _| {
                             menu.map(sync.clone())
@@ -1632,22 +1736,17 @@ impl ScmPanel {
                         let font_size = text_style.font_size.to_pixels(window.rem_size());
                         let content_margin = -window.text_system().descent(font_id, font_size);
                         this.child(
-                            div()
-                                .absolute()
-                                .inset_0()
-                                .px_1p5()
-                                .py_1()
-                                .child(
-                                    div()
-                                        .ml(content_margin)
-                                        .font_family(text_style.font_family)
-                                        .text_size(text_style.font_size)
-                                        .line_height(text_style.line_height)
-                                        .font_weight(text_style.font_weight)
-                                        .text_color(Color::Placeholder.color(cx))
-                                        .truncate()
-                                        .child(self.placeholder(cx)),
-                                ),
+                            div().absolute().inset_0().px_1p5().py_1().child(
+                                div()
+                                    .ml(content_margin)
+                                    .font_family(text_style.font_family)
+                                    .text_size(text_style.font_size)
+                                    .line_height(text_style.line_height)
+                                    .font_weight(text_style.font_weight)
+                                    .text_color(Color::Placeholder.color(cx))
+                                    .truncate()
+                                    .child(self.placeholder(cx)),
+                            ),
                         )
                     }),
             )
@@ -1787,7 +1886,7 @@ impl ScmPanel {
                             this.stage(paths, false, cx)
                         })),
                 ),
-                SectionKind::Changes | SectionKind::Merge => this.child(
+                SectionKind::Changes => this.child(
                     IconButton::new(("bolt-scm-stage-all", section_ix), IconName::Plus)
                         .icon_size(IconSize::Small)
                         .tooltip(Tooltip::text("Stage All Changes"))
@@ -1795,6 +1894,15 @@ impl ScmPanel {
                             cx.stop_propagation();
                             let paths = this.section_paths(kind);
                             this.stage(paths, true, cx)
+                        })),
+                ),
+                SectionKind::Merge => this.child(
+                    IconButton::new(("bolt-scm-stage-all", section_ix), IconName::Plus)
+                        .icon_size(IconSize::Small)
+                        .tooltip(Tooltip::text("Stage All Changes"))
+                        .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.stage_conflicts(entries.clone(), window, cx)
                         })),
                 ),
             });
@@ -1929,6 +2037,7 @@ impl ScmPanel {
 
         let open_entry = entry.clone();
         let discard_entry = entry.clone();
+        let conflict_entry = entry.clone();
         let stage_path = entry.repo_path;
         let actions = h_flex()
             .gap_0p5()
@@ -1962,15 +2071,20 @@ impl ScmPanel {
                         cx.stop_propagation();
                         this.stage(vec![stage_path.clone()], false, cx)
                     })),
-                SectionKind::Changes | SectionKind::Merge => {
-                    IconButton::new(("bolt-scm-stage", id), IconName::Plus)
-                        .icon_size(IconSize::Small)
-                        .tooltip(Tooltip::text("Stage Changes"))
-                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                            cx.stop_propagation();
-                            this.stage(vec![stage_path.clone()], true, cx)
-                        }))
-                }
+                SectionKind::Changes => IconButton::new(("bolt-scm-stage", id), IconName::Plus)
+                    .icon_size(IconSize::Small)
+                    .tooltip(Tooltip::text("Stage Changes"))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                        cx.stop_propagation();
+                        this.stage(vec![stage_path.clone()], true, cx)
+                    })),
+                SectionKind::Merge => IconButton::new(("bolt-scm-stage", id), IconName::Plus)
+                    .icon_size(IconSize::Small)
+                    .tooltip(Tooltip::text("Stage Changes"))
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                        cx.stop_propagation();
+                        this.stage_conflicts(vec![conflict_entry.clone()], window, cx)
+                    })),
             });
 
         let name_row = h_flex()
@@ -2059,6 +2173,18 @@ async fn commits_ahead_of_upstream(
         .trim()
         .parse()
         .log_err()
+}
+
+/// VS Code's `grep(path, /^<{7}\s|^={7}$|^>{7}\s/)` in `categorizeResourceByResolution`.
+fn has_conflict_markers(text: &str) -> bool {
+    text.lines().any(|line| {
+        line == "======="
+            || ["<<<<<<<", ">>>>>>>"].iter().any(|marker| {
+                line.strip_prefix(marker)
+                    .and_then(|rest| rest.chars().next())
+                    .is_some_and(char::is_whitespace)
+            })
+    })
 }
 
 /// The first non-comment line of a merge message, empty without one. The input keeps only the subject, dropping

@@ -469,3 +469,7 @@ Bolt-only files: `assets/themes/one_dark_pro_cursor/`, `assets/icons/bundled_ico
   (`bolt_scm` stash picker). `bolt-sync --continue` now also runs `script/bolt-check-settings` (Bolt defaults on keys
   Zed removed) and lists the upstream commits touching Bolt's touch points and the git crates (behavior changes that
   still compile). Reviewed: `project` whole-repo scan fallback over 64 paths (performance only, `bolt_rescan` unaffected).
+- 2026-11-23: SCM merge-conflict guard (VS Code `categorizeResourceByResolution`): staging from Merge Changes (row or
+  header "+") asks "Are you sure you want to stage … with merge conflicts?" when a both-modified / both-added file still
+  has markers (`^<{7}\s|^={7}$|^>{7}\s`) or the conflict is AU/UA/DD; deleted-by-one-side conflicts stage as before.
+  More menu "Stage All Changes" now stages only the Changes group (VS Code `git.stageAll`), not conflicts.
